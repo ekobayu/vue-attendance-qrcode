@@ -37,7 +37,7 @@
           <label for="location">Working From:</label>
           <div class="location-input">
             <input type="text" id="location" v-model="location" placeholder="e.g. Home Office, Cafe, etc." />
-            <button
+            <!-- <button
               @click="getCurrentLocation"
               class="location-btn"
               :disabled="gettingLocation"
@@ -45,7 +45,7 @@
             >
               <span v-if="gettingLocation" class="loading-spinner"></span>
               <span v-else class="location-icon">📍</span>
-            </button>
+            </button> -->
           </div>
           <small v-if="locationStatus" :class="['location-status', locationStatusType]">
             {{ locationStatus }}
