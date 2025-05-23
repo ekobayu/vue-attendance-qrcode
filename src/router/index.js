@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Home from '../views/Home.vue'
 import Admin from '../views/Admin.vue'
 import User from '../views/User.vue'
-import AdminSetup from '../views/AdminSetup.vue'
+// import AdminSetup from '../views/AdminSetup.vue'
 import RemoteAttendance from '../views/RemoteAttendance.vue'
 import SignUp from '../components/SignUp.vue'
 import UserManagement from '../components/UserManagement.vue'
@@ -26,11 +26,11 @@ const routes = [
     component: User,
     meta: { requiresAuth: true }
   },
-  {
-    path: '/admin-setup',
-    name: 'AdminSetup',
-    component: AdminSetup
-  },
+  // {
+  //   path: '/admin-setup',
+  //   name: 'AdminSetup',
+  //   component: AdminSetup
+  // },
   {
     path: '/remote-attendance',
     name: 'RemoteAttendance',

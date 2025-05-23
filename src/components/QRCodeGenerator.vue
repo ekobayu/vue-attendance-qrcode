@@ -53,7 +53,7 @@
         <p><strong>Attendees:</strong> {{ attendeeCount }}</p>
         <p v-if="activeSession.autoReset" class="auto-reset-info">
           <span class="auto-reset-badge">Auto Reset</span>
-          QR code will automatically reset
+          QR code will automatically reset every day
         </p>
       </div>
 
