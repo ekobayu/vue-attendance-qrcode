@@ -36,8 +36,8 @@
         <div class="form-group">
           <label for="location">Working From:</label>
           <div class="location-input">
-            <input type="text" id="location" v-model="location" placeholder="e.g. Home Office, Cafe, etc." />
-            <!-- <button
+            <input disabled type="text" id="location" v-model="location" placeholder="e.g. Home Office, Cafe, etc." />
+            <button
               @click="getCurrentLocation"
               class="location-btn"
               :disabled="gettingLocation"
@@ -45,14 +45,22 @@
             >
               <span v-if="gettingLocation" class="loading-spinner"></span>
               <span v-else class="location-icon">📍</span>
-            </button> -->
+            </button>
           </div>
           <small v-if="locationStatus" :class="['location-status', locationStatusType]">
             {{ locationStatus }}
           </small>
+          <div v-if="showMapLink && userCoordinates.latitude && userCoordinates.longitude" class="map-link-container">
+            <a :href="mapsUrl || getGoogleMapsUrl()" target="_blank" rel="noopener noreferrer" class="map-link">
+              <span class="map-icon">🗺️</span> View on Google Maps
+            </a>
+            <div class="coordinates">
+              Lat: {{ userCoordinates.latitude.toFixed(4) }}, Lng: {{ userCoordinates.longitude.toFixed(4) }}
+            </div>
+          </div>
 
           <!-- Common locations dropdown -->
-          <div class="common-locations">
+          <!-- <div class="common-locations">
             <label class="small-label">Quick select:</label>
             <div class="location-chips">
               <button
@@ -65,7 +73,7 @@
                 {{ loc }}
               </button>
             </div>
-          </div>
+          </div> -->
         </div>
 
         <div class="form-group">
@@ -91,6 +99,16 @@
       <p>Time: {{ formatTime(markTime) }}</p>
       <p>Session: {{ sessionType }}</p>
       <p>Location: {{ location }}</p>
+
+      <!-- Add map link if coordinates were saved -->
+      <div
+        v-if="mapsUrl || (userCoordinates.latitude && userCoordinates.longitude)"
+        class="map-link-container success-map-link"
+      >
+        <a :href="mapsUrl || getGoogleMapsUrl()" target="_blank" rel="noopener noreferrer" class="map-link">
+          <span class="map-icon">🗺️</span> View Location on Google Maps
+        </a>
+      </div>
     </div>
 
     <div v-if="error" class="error-message">
@@ -123,7 +141,13 @@ export default {
       locationStatus: '',
       locationStatusType: 'info',
       locationSupported: 'geolocation' in navigator,
-      commonLocations: ['Home', 'Coffee Shop', 'Co-working Space', 'Library', 'Client Site']
+      commonLocations: ['Home', 'Coffee Shop', 'Co-working Space', 'Library', 'Client Site'],
+      userCoordinates: {
+        latitude: null,
+        longitude: null
+      },
+      showMapLink: false,
+      mapsUrl: null
     }
   },
   created() {
@@ -148,6 +172,7 @@ export default {
       this.gettingLocation = true
       this.locationStatus = 'Getting your location...'
       this.locationStatusType = 'info'
+      this.showMapLink = false
 
       // Try IP-based geolocation as a fallback
       const tryIpBasedLocation = async () => {
@@ -172,6 +197,13 @@ export default {
           this.location = locationText.trim()
           this.locationStatus = 'Location detected via IP address'
           this.locationStatusType = 'success'
+
+          // Store coordinates from IP geolocation if available
+          if (data.latitude && data.longitude) {
+            this.userCoordinates.latitude = data.latitude
+            this.userCoordinates.longitude = data.longitude
+            this.showMapLink = true
+          }
         } catch (error) {
           console.error('IP geolocation error:', error)
           this.locationStatus = 'Could not detect your location automatically. Please enter it manually.'
@@ -187,6 +219,12 @@ export default {
         async (position) => {
           try {
             const { latitude, longitude } = position.coords
+
+            // Store the coordinates
+            this.userCoordinates.latitude = latitude
+            this.userCoordinates.longitude = longitude
+            this.showMapLink = true
+            this.mapsUrl = this.getGoogleMapsUrl() // Generate and store the URL
 
             // Get location name from coordinates using reverse geocoding
             const response = await fetch(
@@ -239,24 +277,18 @@ export default {
               this.locationStatus = 'Location detected successfully'
               this.locationStatusType = 'success'
             } else {
-              this.location = `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`
+              this.location = `${locationName || 'Current Location'} (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
               this.locationStatus = 'Location coordinates detected'
               this.locationStatusType = 'success'
             }
           } catch (error) {
             console.error('Error getting location name:', error)
 
-            // Try to use just the coordinates
-            try {
-              const { latitude, longitude } = position.coords
-              this.location = `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`
-              this.locationStatus = 'Location coordinates detected'
-              this.locationStatusType = 'success'
-            } catch (coordError) {
-              console.error('Error using coordinates:', coordError)
-              // Fall back to IP-based location
-              await tryIpBasedLocation()
-            }
+            // Use just the coordinates
+            const { latitude, longitude } = position.coords
+            this.location = `Current Location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`
+            this.locationStatus = 'Location coordinates detected'
+            this.locationStatusType = 'success'
           } finally {
             this.gettingLocation = false
           }
@@ -270,11 +302,16 @@ export default {
         },
         // Options
         {
-          enableHighAccuracy: false, // Set to false to improve success rate
+          enableHighAccuracy: false, // Set to true for better accuracy when showing on map
           timeout: 10000,
           maximumAge: 60000 // Allow cached positions up to 1 minute old
         }
       )
+    },
+
+    getGoogleMapsUrl() {
+      const { latitude, longitude } = this.userCoordinates
+      return `https://www.google.com/maps?q=${latitude},${longitude}`
     },
 
     checkActiveSession() {
@@ -343,6 +380,21 @@ export default {
           this.markDate = today
           this.location = data.location || ''
 
+          // Load saved coordinates if available
+          if (data.coordinates) {
+            this.userCoordinates.latitude = data.coordinates.latitude
+            this.userCoordinates.longitude = data.coordinates.longitude
+            this.showMapLink = true
+          }
+
+          // Store the maps URL if available
+          if (data.mapsUrl) {
+            this.mapsUrl = data.mapsUrl
+          } else if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
+            // Generate it if we have coordinates but no stored URL
+            this.mapsUrl = this.getGoogleMapsUrl()
+          }
+
           // Get session type
           if (data.sessionType === 'morning') {
             this.sessionType = 'Morning (07:30 AM - 04:30 PM)'
@@ -397,19 +449,35 @@ export default {
           this.sessionType = 'Custom Session'
         }
 
-        // Mark attendance in session with remote work flag
-        await set(attendeeRef, {
+        // Prepare attendance data with coordinates if available
+        const attendanceData = {
           email: userEmail,
           timestamp: this.markTime,
           remote: true,
           location: this.location,
           workSummary: this.workSummary || ''
-        })
+        }
+
+        // Add coordinates and Google Maps URL if available
+        if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
+          const mapsUrl = this.getGoogleMapsUrl()
+
+          attendanceData.coordinates = {
+            latitude: this.userCoordinates.latitude,
+            longitude: this.userCoordinates.longitude
+          }
+
+          attendanceData.mapsUrl = mapsUrl
+        }
+
+        // Mark attendance in session with remote work flag
+        await set(attendeeRef, attendanceData)
 
         // Also save to daily attendance records
         const dailyAttendanceRef = dbRef(db, `daily-attendance/${this.activeSession.date}`)
         const newAttendanceRef = push(dailyAttendanceRef)
-        await set(newAttendanceRef, {
+
+        const dailyAttendanceData = {
           userId: userId,
           email: userEmail,
           timestamp: this.markTime,
@@ -418,17 +486,42 @@ export default {
           remote: true,
           location: this.location,
           workSummary: this.workSummary || ''
-        })
+        }
+
+        // Add coordinates and maps URL to daily attendance
+        if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
+          dailyAttendanceData.coordinates = {
+            latitude: this.userCoordinates.latitude,
+            longitude: this.userCoordinates.longitude
+          }
+
+          dailyAttendanceData.mapsUrl = this.getGoogleMapsUrl()
+        }
+
+        await set(newAttendanceRef, dailyAttendanceData)
 
         // Also save to user's attendance history
         const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${this.activeSession.date}`)
-        await set(userAttendanceRef, {
+
+        const userAttendanceData = {
           timestamp: this.markTime,
           recordId: newAttendanceRef.key,
           sessionType: this.activeSession.type,
           remote: true,
           location: this.location
-        })
+        }
+
+        // Add coordinates and maps URL to user attendance
+        if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
+          userAttendanceData.coordinates = {
+            latitude: this.userCoordinates.latitude,
+            longitude: this.userCoordinates.longitude
+          }
+
+          userAttendanceData.mapsUrl = this.getGoogleMapsUrl()
+        }
+
+        await set(userAttendanceRef, userAttendanceData)
 
         this.attendanceMarked = true
       } catch (error) {
@@ -686,5 +779,41 @@ textarea {
   color: #a94442;
   border-radius: 4px;
   text-align: center;
+}
+
+.map-link-container {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f0f8ff;
+  border-radius: 4px;
+  border-left: 3px solid #2196f3;
+}
+
+.map-link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #2196f3;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.map-link:hover {
+  text-decoration: underline;
+}
+
+.map-icon {
+  font-size: 18px;
+}
+
+.coordinates {
+  margin-top: 5px;
+  font-size: 12px;
+  color: #666;
+}
+
+.success-map-link {
+  display: inline-block;
+  margin-top: 15px;
 }
 </style>

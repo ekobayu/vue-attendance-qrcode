@@ -55,6 +55,7 @@
               <th @click="sortTable('location')" :class="getSortClass('location')">
                 Location <span class="sort-icon">{{ getSortIcon('location') }}</span>
               </th>
+              <th v-if="hasRemoteAttendees">Map</th>
             </tr>
           </thead>
           <tbody>
@@ -69,6 +70,18 @@
                 </span>
               </td>
               <td>{{ attendee.remote ? attendee.location : 'Office' }}</td>
+              <td v-if="hasRemoteAttendees">
+                <a
+                  v-if="attendee.remote && (attendee.mapsUrl || hasCoordinates(attendee))"
+                  :href="attendee.mapsUrl || getGoogleMapsUrl(attendee)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="map-link"
+                  title="View location on Google Maps"
+                >
+                  <span class="map-icon">🗺️</span>
+                </a>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -289,6 +302,7 @@
                 <th>Time</th>
                 <th>Type</th>
                 <th>Location</th>
+                <th>Map</th>
               </tr>
             </thead>
             <tbody>
@@ -302,6 +316,18 @@
                   </span>
                 </td>
                 <td>{{ attendee.remote ? attendee.location : 'Office' }}</td>
+                <td>
+                  <a
+                    v-if="attendee.remote && (attendee.mapsUrl || hasCoordinates(attendee))"
+                    :href="attendee.mapsUrl || getGoogleMapsUrl(attendee)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="map-link"
+                    title="View location on Google Maps"
+                  >
+                    <span class="map-icon">🗺️</span>
+                  </a>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -396,6 +422,9 @@ export default {
     },
     totalPages() {
       return Math.ceil(this.filteredData.length / this.itemsPerPage)
+    },
+    hasRemoteAttendees() {
+      return this.filteredAttendees.some((attendee) => attendee.remote)
     }
   },
   watch: {
@@ -440,7 +469,14 @@ export default {
             id: key,
             originalIndex: index, // Store original index for sorting
             ...data[key],
-            location: data[key].location || 'Office' // Ensure location exists
+            location: data[key].location || 'Office', // Ensure location exists
+
+            // Ensure mapsUrl exists if coordinates are available but no mapsUrl
+            mapsUrl:
+              data[key].mapsUrl ||
+              (data[key].coordinates
+                ? `https://www.google.com/maps?q=${data[key].coordinates.latitude},${data[key].coordinates.longitude}`
+                : null)
           }))
 
           // Initial sort by timestamp
@@ -614,6 +650,17 @@ export default {
       }
     },
 
+    hasCoordinates(attendee) {
+      return attendee.coordinates && attendee.coordinates.latitude && attendee.coordinates.longitude
+    },
+
+    getGoogleMapsUrl(attendee) {
+      if (!this.hasCoordinates(attendee)) return null
+
+      const { latitude, longitude } = attendee.coordinates
+      return `https://www.google.com/maps?q=${latitude},${longitude}`
+    },
+
     clearSessionFilter() {
       this.sessionDateFilter = ''
       this.filterSessions()
@@ -749,11 +796,21 @@ export default {
 
       if (snapshot.exists()) {
         this.sessionAttendees = Object.keys(snapshot.val())
-          .map((userId) => ({
-            userId,
-            ...snapshot.val()[userId],
-            location: snapshot.val()[userId].location || 'Office' // Ensure location exists
-          }))
+          .map((userId) => {
+            const attendeeData = snapshot.val()[userId]
+            return {
+              userId,
+              ...attendeeData,
+              location: attendeeData.location || 'Office', // Ensure location exists
+
+              // Ensure mapsUrl exists if coordinates are available but no mapsUrl
+              mapsUrl:
+                attendeeData.mapsUrl ||
+                (attendeeData.coordinates
+                  ? `https://www.google.com/maps?q=${attendeeData.coordinates.latitude},${attendeeData.coordinates.longitude}`
+                  : null)
+            }
+          })
           .sort((a, b) => a.timestamp - b.timestamp)
 
         // Initialize filtered attendees
@@ -875,22 +932,36 @@ export default {
     exportToCSV() {
       if (!this.attendees.length) return
 
-      // const dateStr = this.formatDate(this.selectedDate)
-      const headers = ['No', 'Email', 'Time', 'Session', 'Type', 'Location']
+      const headers = ['No', 'Email', 'Time', 'Session', 'Type', 'Location', 'Maps Link']
 
       // Use all filtered data, not just the current page
       let csvContent = headers.join(',') + '\n'
 
       this.filteredData.forEach((attendee, index) => {
+        const mapsUrl =
+          attendee.remote && (attendee.mapsUrl || this.hasCoordinates(attendee))
+            ? attendee.mapsUrl || this.getGoogleMapsUrl(attendee)
+            : ''
+
         const row = [
           index + 1,
           attendee.email,
           this.formatTime(attendee.timestamp),
           this.getSessionTypeDisplay(attendee.sessionType),
           attendee.remote ? 'Remote' : 'Office',
-          attendee.remote ? attendee.location : 'Office'
+          attendee.remote ? attendee.location : 'Office',
+          mapsUrl
         ]
-        csvContent += row.join(',') + '\n'
+
+        // Escape fields that might contain commas
+        const escapedRow = row.map((field) => {
+          if (field && typeof field === 'string' && (field.includes(',') || field.includes('"'))) {
+            return `"${field.replace(/"/g, '""')}"`
+          }
+          return field
+        })
+
+        csvContent += escapedRow.join(',') + '\n'
       })
 
       this.downloadCSV(csvContent, `Attendance_${this.selectedDate}.csv`)
@@ -899,27 +970,41 @@ export default {
     exportSessionToCSV() {
       if (!this.sessionAttendees.length || !this.selectedSession) return
 
-      // const sessionDate = this.formatDate(this.selectedSession.date)
-      // const sessionType = this.getSessionTypeDisplay(this.selectedSession.type)
-      const headers = ['No', 'Email', 'Time', 'Type', 'Location']
+      const headers = ['No', 'Email', 'Time', 'Type', 'Location', 'Maps Link']
 
       let csvContent = headers.join(',') + '\n'
 
       // Use filtered modal attendees
       this.filteredModalAttendees.forEach((attendee, index) => {
+        const mapsUrl =
+          attendee.remote && (attendee.mapsUrl || this.hasCoordinates(attendee))
+            ? attendee.mapsUrl || this.getGoogleMapsUrl(attendee)
+            : ''
+
         const row = [
           index + 1,
           attendee.email,
           this.formatTime(attendee.timestamp),
           attendee.remote ? 'Remote' : 'Office',
-          attendee.remote ? attendee.location : 'Office'
+          attendee.remote ? attendee.location : 'Office',
+          mapsUrl
         ]
-        csvContent += row.join(',') + '\n'
+
+        // Escape fields that might contain commas
+        const escapedRow = row.map((field) => {
+          if (field && typeof field === 'string' && (field.includes(',') || field.includes('"'))) {
+            return `"${field.replace(/"/g, '""')}"`
+          }
+          return field
+        })
+
+        csvContent += escapedRow.join(',') + '\n'
       })
 
       const filename = `Session_${this.selectedSession.date}_${this.selectedSession.type}.csv`
       this.downloadCSV(csvContent, filename)
     },
+
     downloadCSV(csvContent, filename) {
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
@@ -1442,6 +1527,27 @@ tr:nth-child(even) {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.map-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #2196f3;
+  text-decoration: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #e3f2fd;
+  transition: background-color 0.2s;
+}
+
+.map-link:hover {
+  background-color: #bbdefb;
+}
+
+.map-icon {
+  font-size: 16px;
 }
 
 @media (max-width: 768px) {
