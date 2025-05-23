@@ -3,10 +3,14 @@ import App from './App.vue'
 import router from './router'
 import { auth } from './firebase/config'
 import { onAuthStateChanged } from 'firebase/auth'
+import { setupVerificationStatusUpdater } from './services/auth'
 
 // Navigation guard
 router.beforeEach((to, from, next) => {
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
+
+  // Call this during app initialization
+  setupVerificationStatusUpdater()
 
   if (requiresAuth) {
     onAuthStateChanged(auth, (user) => {
