@@ -28,7 +28,7 @@
 </template>
 
 <script>
-import { QrcodeStream } from 'vue-qrcode-reader'
+import { QrcodeStream } from 'qrcode-reader-vue3'
 import { auth, db } from '../firebase/config'
 import { ref as dbRef, set, get, push } from 'firebase/database'
 
