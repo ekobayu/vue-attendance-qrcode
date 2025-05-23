@@ -140,7 +140,7 @@
       </div>
     </div>
 
-    <!-- Archived Sessions Tab -->
+    <!-- Archived Sessions Tab with Collapsible Month Groups -->
     <div v-else-if="activeTab === 'archived'">
       <div class="session-filters">
         <div class="date-filter">
@@ -169,30 +169,49 @@
       <div class="session-list">
         <h3>Archived Sessions</h3>
 
-        <div v-if="filteredArchivedSessions.length === 0" class="no-records">No archived sessions found.</div>
+        <div v-if="Object.keys(groupedArchivedSessions).length === 0" class="no-records">
+          No archived sessions found.
+        </div>
 
         <div v-else>
-          <div v-for="session in filteredArchivedSessions" :key="session.id" class="session-item archived">
-            <div class="session-header">
-              <div class="session-date">{{ formatDate(session.date) }}</div>
-              <div class="session-time">{{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}</div>
+          <!-- Loop through each month group -->
+          <div v-for="(sessions, month) in groupedArchivedSessions" :key="month" class="month-group">
+            <div class="month-header" @click="toggleMonthExpand(month)">
+              <div class="month-title">
+                <span class="expand-icon">{{ expandedMonths[month] ? '▼' : '►' }}</span>
+                <h4>{{ month }}</h4>
+              </div>
+              <span class="session-count">{{ sessions.length }} sessions</span>
             </div>
 
-            <div class="session-details">
-              <div class="session-info">
-                <div class="session-type">{{ getSessionTypeDisplay(session.type) }}</div>
-                <div class="archive-info">
-                  <span class="archived-badge">Archived</span>
-                  {{ formatDateTime(session.archivedAt) }}
+            <!-- Collapsible session list for this month -->
+            <div v-if="expandedMonths[month]" class="month-sessions">
+              <!-- Loop through sessions in this month -->
+              <div v-for="session in sessions" :key="session.id" class="session-item archived">
+                <div class="session-header">
+                  <div class="session-date">{{ formatDate(session.date) }}</div>
+                  <div class="session-time">
+                    {{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}
+                  </div>
                 </div>
-                <div class="attendee-count">
-                  <strong>{{ getAttendeeCount(session) }}</strong> attendees
-                </div>
-              </div>
 
-              <div class="session-actions">
-                <button @click="viewSessionDetails(session)" class="view-btn">View Details</button>
-                <button @click="restoreSession(session)" class="restore-btn">Restore</button>
+                <div class="session-details">
+                  <div class="session-info">
+                    <div class="session-type">{{ getSessionTypeDisplay(session.type) }}</div>
+                    <div class="archive-info">
+                      <span class="archived-badge">Archived</span>
+                      {{ formatDateTime(session.archivedAt) }}
+                    </div>
+                    <div class="attendee-count">
+                      <strong>{{ getAttendeeCount(session) }}</strong> attendees
+                    </div>
+                  </div>
+
+                  <div class="session-actions">
+                    <button @click="viewSessionDetails(session)" class="view-btn">View Details</button>
+                    <button @click="restoreSession(session)" class="restore-btn">Restore</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -331,6 +350,8 @@ export default {
       archivedDateFilter: '',
       archivedSearchQuery: '',
       filteredArchivedSessions: [],
+      groupedArchivedSessions: {},
+      expandedMonths: {}, // Track which months are expanded
 
       // Modal search
       modalSearchQuery: '',
@@ -488,7 +509,60 @@ export default {
         )
       }
 
-      this.filteredArchivedSessions = filtered
+      // Group by month
+      this.groupedArchivedSessions = this.groupSessionsByMonth(filtered)
+
+      // Auto-expand the first month or if there's only one month
+      const months = Object.keys(this.groupedArchivedSessions)
+
+      // Create a new object for expandedMonths
+      const newExpandedMonths = { ...this.expandedMonths }
+
+      if (months.length === 1) {
+        // If there's only one month, expand it
+        newExpandedMonths[months[0]] = true
+      } else if (months.length > 0 && this.archivedDateFilter) {
+        // If filtering by date, expand all months
+        months.forEach((month) => {
+          newExpandedMonths[month] = true
+        })
+      }
+
+      // Update the expandedMonths object
+      this.expandedMonths = newExpandedMonths
+    },
+
+    groupSessionsByMonth(sessions) {
+      const grouped = {}
+
+      sessions.forEach((session) => {
+        // Extract month and year from the date
+        const date = new Date(session.date)
+        const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' })
+
+        // Create array for this month if it doesn't exist
+        if (!grouped[monthYear]) {
+          grouped[monthYear] = []
+        }
+
+        // Add session to the appropriate month group
+        grouped[monthYear].push(session)
+      })
+
+      // Sort the sessions within each month by date (newest first)
+      Object.keys(grouped).forEach((month) => {
+        grouped[month].sort((a, b) => new Date(b.date) - new Date(a.date))
+      })
+
+      return grouped
+    },
+
+    toggleMonthExpand(month) {
+      // Create a new object with the updated value to ensure reactivity
+      this.expandedMonths = {
+        ...this.expandedMonths,
+        [month]: !this.expandedMonths[month]
+      }
     },
 
     clearSessionFilter() {
@@ -1134,6 +1208,79 @@ tr:nth-child(even) {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.month-group {
+  margin-bottom: 20px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background-color: #f5f5f5;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.month-header:hover {
+  background-color: #e8e8e8;
+}
+
+.month-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.expand-icon {
+  color: #666;
+  font-size: 12px;
+  width: 12px;
+}
+
+.month-header h4 {
+  margin: 0;
+  color: #333;
+  font-size: 1.1em;
+}
+
+.session-count {
+  background-color: #e0e0e0;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  color: #555;
+}
+
+.month-sessions {
+  padding: 10px;
+  background-color: #fff;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Update session item styling for the new structure */
+.month-sessions .session-item {
+  margin-bottom: 10px;
+}
+
+.month-sessions .session-item:last-child {
+  margin-bottom: 0;
 }
 
 /* Modal Styles */
