@@ -120,6 +120,18 @@ export default {
         nextReset.setTime(nextReset.getTime() + this.resetHours * 60 * 60 * 1000)
       }
 
+      // If the next reset falls on a weekend, skip to Monday
+      const day = nextReset.getDay()
+      if (day === 0) {
+        // Sunday
+        nextReset.setDate(nextReset.getDate() + 1) // Skip to Monday
+        nextReset.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
+      } else if (day === 6) {
+        // Saturday
+        nextReset.setDate(nextReset.getDate() + 2) // Skip to Monday
+        nextReset.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
+      }
+
       return nextReset.getTime()
     },
 
@@ -135,6 +147,20 @@ export default {
 
     formatTime(timeString) {
       if (!timeString) return 'Not set'
+
+      // Check if timeString is already a formatted time string (HH:MM)
+      if (typeof timeString === 'string' && timeString.includes(':')) {
+        // Just return the time string with AM/PM format
+        const [hours, minutes] = timeString.split(':').map(Number)
+        const date = new Date()
+        date.setHours(hours, minutes, 0, 0)
+        return date.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }
+
+      // If it's a timestamp, convert normally
       return new Date(timeString).toLocaleTimeString([], {
         hour: '2-digit',
         minute: '2-digit'
