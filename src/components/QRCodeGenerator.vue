@@ -711,7 +711,7 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'morning') {
-        return 'Morning Session (07:30 AM - 04:30 PM)'
+        return 'Morning (07:30 AM - 04:30 PM)'
       } else if (type === 'custom') {
         return 'Custom Session'
       } else if (type === 'day') {

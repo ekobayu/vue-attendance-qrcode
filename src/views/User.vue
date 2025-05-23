@@ -518,7 +518,7 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'morning') {
-        return 'Morning Session'
+        return 'Morning'
       } else if (type === 'day') {
         return 'Day Session'
       } else if (type === 'full-day') {

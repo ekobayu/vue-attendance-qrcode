@@ -722,13 +722,15 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'morning') {
-        return 'Morning Session (6 AM - 6 PM)'
+        return 'Morning'
       } else if (type === 'day') {
-        return 'Day Session (8 AM - 6 PM)'
+        return 'Day Session'
+      } else if (type === 'full-day') {
+        return 'Full Day'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
-      return type || 'Unknown'
+      return type || ''
     },
 
     async viewSessionDetails(session) {

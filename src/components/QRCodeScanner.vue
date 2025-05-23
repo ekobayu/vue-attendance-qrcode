@@ -134,9 +134,7 @@ export default {
 
         // Set session type
         if (sessionData.type === 'morning') {
-          this.sessionType = 'Morning Session (6 AM - 6 PM)'
-        } else if (sessionData.type === 'day') {
-          this.sessionType = 'Day Session (8 AM - 6 PM)'
+          this.sessionType = 'Morning (07.30 AM - 04.30 PM)'
         } else {
           this.sessionType = 'Custom Session'
         }

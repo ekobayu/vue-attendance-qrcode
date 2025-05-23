@@ -345,7 +345,7 @@ export default {
 
           // Get session type
           if (data.sessionType === 'morning') {
-            this.sessionType = 'Morning Session (07:30 AM - 04:30 PM)'
+            this.sessionType = 'Morning (07:30 AM - 04:30 PM)'
           } else if (data.sessionType === 'day') {
             this.sessionType = 'Day Session (08:00 AM - 05:00 PM)'
           } else {
@@ -390,7 +390,7 @@ export default {
 
         // Set session type
         if (this.activeSession.type === 'morning') {
-          this.sessionType = 'Morning Session (07:30 AM - 04:30 PM)'
+          this.sessionType = 'Morning (07:30 AM - 04:30 PM)'
         } else if (this.activeSession.type === 'day') {
           this.sessionType = 'Day Session (08:00 AM - 05:00 PM)'
         } else {
@@ -441,7 +441,7 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'morning') {
-        return 'Morning Session (07:30 AM - 04:30 PM)'
+        return 'Morning (07:30 AM - 04:30 PM)'
       } else if (type === 'day') {
         return 'Day Session (08:00 AM - 05:00 PM)'
       } else if (type === 'custom') {
