@@ -38,10 +38,15 @@
             </div>
           </div>
 
-          <div class="option-card remote">
+          <div class="option-card remote" v-if="isRemoteWorkEnabled">
             <h3>Remote Work Attendance</h3>
             <p>Working from home or another location? Mark your attendance remotely.</p>
             <router-link to="/remote-attendance" class="remote-btn">Mark Remote Attendance</router-link>
+          </div>
+
+          <div class="option-card remote disabled" v-else>
+            <h3>Remote Work Attendance</h3>
+            <p>Remote work attendance is not available {{ getRemoteWorkUnavailableReason() }}</p>
           </div>
         </div>
 
@@ -159,7 +164,10 @@ export default {
       activeTab: 'mark',
       selectedMonth: '',
       searchQuery: '',
-      expandedMonths: {}
+      expandedMonths: {},
+      remoteWorkSettings: null,
+      remoteWorkLoaded: false,
+      weeklyLimitReached: false
     }
   },
   computed: {
@@ -184,6 +192,42 @@ export default {
         .sort((a, b) => b.value.localeCompare(a.value)) // Sort newest first
     },
 
+    isRemoteWorkEnabled() {
+      if (!this.remoteWorkLoaded || !this.remoteWorkSettings) return false
+
+      // Get current day and time
+      const now = new Date()
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const currentDay = dayNames[now.getDay()]
+
+      // Check if current day is enabled
+      if (!this.remoteWorkSettings.enabledDays[currentDay]) {
+        return false
+      }
+
+      // Check time restrictions
+      if (this.remoteWorkSettings.startTime && this.remoteWorkSettings.endTime) {
+        const currentTime = now.getHours() * 60 + now.getMinutes() // minutes since midnight
+
+        const [startHours, startMinutes] = this.remoteWorkSettings.startTime.split(':').map(Number)
+        const [endHours, endMinutes] = this.remoteWorkSettings.endTime.split(':').map(Number)
+
+        const startTime = startHours * 60 + startMinutes
+        const endTime = endHours * 60 + endMinutes
+
+        if (currentTime < startTime || currentTime > endTime) {
+          return false
+        }
+      }
+
+      // Check weekly limit if enabled
+      if (this.remoteWorkSettings.limitPerWeek && this.weeklyLimitReached) {
+        return false
+      }
+
+      return true
+    },
+
     inPersonCount() {
       return this.filteredHistory.filter((record) => !record.remote).length
     },
@@ -201,6 +245,8 @@ export default {
         this.loadAttendanceHistory()
       }
     })
+
+    this.loadRemoteWorkSettings()
   },
   methods: {
     async loadAttendanceHistory() {
@@ -297,6 +343,145 @@ export default {
       })
 
       this.groupedHistory = grouped
+    },
+
+    async loadRemoteWorkSettings() {
+      try {
+        const settingsRef = dbRef(db, 'settings/remoteWork')
+        const snapshot = await get(settingsRef)
+
+        if (snapshot.exists()) {
+          this.remoteWorkSettings = snapshot.val()
+        } else {
+          // Default settings if none exist
+          this.remoteWorkSettings = {
+            enabledDays: {
+              monday: true,
+              tuesday: true,
+              wednesday: true,
+              thursday: true,
+              friday: true,
+              saturday: false,
+              sunday: false
+            },
+            startTime: '08:00',
+            endTime: '17:00',
+            requireLocation: true,
+            limitPerWeek: false,
+            maxDaysPerWeek: 3
+          }
+        }
+
+        this.remoteWorkLoaded = true
+
+        // If weekly limits are enabled, check user's remote days this week
+        if (this.remoteWorkSettings?.limitPerWeek && this.user) {
+          await this.checkWeeklyRemoteDays()
+        }
+      } catch (error) {
+        console.error('Error loading remote work settings:', error)
+        // Set default values on error
+        this.remoteWorkSettings = {
+          enabledDays: {
+            monday: true,
+            tuesday: true,
+            wednesday: true,
+            thursday: true,
+            friday: true,
+            saturday: false,
+            sunday: false
+          }
+        }
+        this.remoteWorkLoaded = true
+      }
+    },
+
+    getRemoteWorkUnavailableReason() {
+      if (!this.remoteWorkLoaded || !this.remoteWorkSettings) return 'while settings are loading...'
+
+      const now = new Date()
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const currentDay = dayNames[now.getDay()]
+
+      // Check if current day is disabled
+      if (!this.remoteWorkSettings.enabledDays[currentDay]) {
+        return 'on ' + currentDay.charAt(0).toUpperCase() + currentDay.slice(1) + 's.'
+      }
+
+      // Check time restrictions
+      if (this.remoteWorkSettings.startTime && this.remoteWorkSettings.endTime) {
+        const [startHours, startMinutes] = this.remoteWorkSettings.startTime.split(':').map(Number)
+        const [endHours, endMinutes] = this.remoteWorkSettings.endTime.split(':').map(Number)
+
+        const startTimeFormatted = new Date().setHours(startHours, startMinutes, 0, 0)
+        const endTimeFormatted = new Date().setHours(endHours, endMinutes, 0, 0)
+
+        const startTimeDisplay = new Date(startTimeFormatted).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+        const endTimeDisplay = new Date(endTimeFormatted).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+        const currentTime = now.getHours() * 60 + now.getMinutes()
+        const startTime = startHours * 60 + startMinutes
+        const endTime = endHours * 60 + endMinutes
+
+        if (currentTime < startTime || currentTime > endTime) {
+          return `outside allowed hours (${startTimeDisplay} - ${endTimeDisplay}).`
+        }
+      }
+
+      // If weekly limit is reached
+      if (this.remoteWorkSettings.limitPerWeek && this.weeklyLimitReached) {
+        return `as you've reached your limit of ${this.remoteWorkSettings.maxDaysPerWeek} remote days this week.`
+      }
+
+      return 'at this time.'
+    },
+
+    async checkWeeklyRemoteDays() {
+      if (!this.user) return
+
+      try {
+        // Get the start of the current week (Sunday)
+        const today = new Date()
+        const startOfWeek = new Date(today)
+        startOfWeek.setDate(today.getDate() - today.getDay()) // Go to Sunday
+        startOfWeek.setHours(0, 0, 0, 0)
+
+        // Get the end of the week (Saturday)
+        const endOfWeek = new Date(startOfWeek)
+        endOfWeek.setDate(startOfWeek.getDate() + 6)
+        endOfWeek.setHours(23, 59, 59, 999)
+
+        // Format dates for query
+        const startDate = startOfWeek.toISOString().split('T')[0]
+        const endDate = endOfWeek.toISOString().split('T')[0]
+
+        // Get user's attendance for this week
+        const userAttendanceRef = dbRef(db, `user-attendance/${this.user.uid}`)
+        const snapshot = await get(userAttendanceRef)
+
+        if (snapshot.exists()) {
+          const attendanceData = snapshot.val()
+          let remoteDaysThisWeek = 0
+
+          // Count remote days this week
+          for (const date in attendanceData) {
+            if (date >= startDate && date <= endDate && attendanceData[date].remote) {
+              remoteDaysThisWeek++
+            }
+          }
+
+          // Check if limit is reached
+          this.weeklyLimitReached = remoteDaysThisWeek >= this.remoteWorkSettings.maxDaysPerWeek
+        } else {
+          this.weeklyLimitReached = false
+        }
+      } catch (error) {
+        console.error('Error checking weekly remote days:', error)
+        this.weeklyLimitReached = false
+      }
     },
 
     toggleMonthExpand(month) {
@@ -397,6 +582,19 @@ export default {
 
 .option-card.remote h3 {
   border-bottom-color: #2196f3;
+}
+
+.option-card.remote.disabled {
+  opacity: 0.7;
+  background-color: #f5f5f5;
+}
+
+.option-card.remote.disabled h3 {
+  color: #666;
+}
+
+.option-card.remote.disabled p {
+  color: #888;
 }
 
 .remote-btn {

@@ -12,7 +12,8 @@
         <button @click="activeTab = 'qrcode'" :class="{ active: activeTab === 'qrcode' }">Attendance QR Code</button>
         <button @click="activeTab = 'records'" :class="{ active: activeTab === 'records' }">Attendance Records</button>
         <button @click="activeTab = 'users'" :class="{ active: activeTab === 'users' }">User Management</button>
-        <button @click="activeTab = 'settings'" :class="{ active: activeTab === 'settings' }">Settings</button>
+        <button @click="activeTab = 'remote'" :class="{ active: activeTab === 'remote' }">Remote Settings</button>
+        <button @click="activeTab = 'settings'" :class="{ active: activeTab === 'settings' }">Time Settings</button>
       </div>
 
       <div class="admin-dashboard" v-if="activeTab === 'qrcode'">
@@ -33,6 +34,7 @@
         <QRCodeGenerator v-if="activeTab === 'qrcode'" />
         <AttendanceList v-if="activeTab === 'records'" />
         <UserManagement v-if="activeTab === 'users'" />
+        <RemoteWorkSettings v-if="activeTab === 'remote'" />
         <AutoResetSettings v-if="activeTab === 'settings'" />
       </div>
     </div>
@@ -47,6 +49,7 @@ import QRCodeGenerator from '../components/QRCodeGenerator.vue'
 import AttendanceList from '../components/AttendanceList.vue'
 import UserManagement from '../components/UserManagement.vue'
 import AutoResetSettings from '../components/AutoResetSettings.vue'
+import RemoteWorkSettings from '../components/RemoteWorkSettings.vue'
 
 export default {
   name: 'AdminPage',
@@ -54,7 +57,8 @@ export default {
     QRCodeGenerator,
     AttendanceList,
     UserManagement,
-    AutoResetSettings
+    AutoResetSettings,
+    RemoteWorkSettings
   },
   data() {
     return {
