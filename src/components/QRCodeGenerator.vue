@@ -239,11 +239,40 @@ export default {
         // Get current session details
         const oldSessionId = currentSession.sessionId
 
-        // Create a new session ID
-        const newSessionId = 'session-' + Date.now().toString()
-
         // Get today's date in YYYY-MM-DD format
         const today = new Date().toISOString().split('T')[0]
+
+        // Check if today is a weekend
+        if (this.isWeekend(today)) {
+          console.log('Auto-reset skipped: Today is a weekend')
+
+          // Instead of creating a new session, just update the next reset time
+          // to tomorrow and keep the current session active
+          const nextDay = new Date()
+          nextDay.setDate(nextDay.getDate() + 1)
+          nextDay.setHours(8, 0, 0, 0) // Reset at 8 AM tomorrow
+
+          const updatedSession = {
+            ...currentSession,
+            nextResetTime: nextDay.getTime()
+          }
+
+          // Update active session with new reset time
+          const activeSessionRef = dbRef(db, 'active-session')
+          await set(activeSessionRef, updatedSession)
+
+          // Also update the session in the sessions collection
+          const sessionRef = dbRef(db, `attendance-sessions/${currentSession.sessionId}`)
+          await set(sessionRef, {
+            ...updatedSession,
+            sessionId: undefined // Don't store sessionId in the sessions collection
+          })
+
+          return // Exit early, don't create a new session
+        }
+
+        // Create a new session ID
+        const newSessionId = 'session-' + Date.now().toString()
 
         // Calculate new reset time (24 hours from now)
         // const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
@@ -434,9 +463,19 @@ export default {
       const nextReset = new Date(now)
       nextReset.setHours(hours, minutes, 0, 0)
 
-      // If that time has already passed today, add specified hours
+      // If that time has already passed today, add one day
       if (nextReset <= now) {
-        nextReset.setTime(nextReset.getTime() + settings.resetHours * 60 * 60 * 1000)
+        nextReset.setDate(nextReset.getDate() + 1)
+      }
+
+      // If the next reset falls on a weekend, skip to Monday
+      const day = nextReset.getDay()
+      if (day === 0) {
+        // Sunday
+        nextReset.setDate(nextReset.getDate() + 1) // Skip to Monday
+      } else if (day === 6) {
+        // Saturday
+        nextReset.setDate(nextReset.getDate() + 2) // Skip to Monday
       }
 
       return nextReset.getTime()
@@ -543,6 +582,14 @@ export default {
 
         // Get today's date in YYYY-MM-DD format
         const today = new Date().toISOString().split('T')[0]
+
+        // Check if today is a weekend
+        if (this.isWeekend(today)) {
+          // Show a confirmation dialog before proceeding on weekends
+          if (!confirm('Today is a weekend. Are you sure you want to create a new session?')) {
+            return // Exit if user cancels
+          }
+        }
 
         // Get auto-reset settings
         const settingsRef = dbRef(db, 'settings/autoReset')
@@ -694,6 +741,12 @@ export default {
         return 'Custom Session'
       }
       return type || 'Unknown'
+    },
+
+    isWeekend(date) {
+      const day = new Date(date).getDay()
+      // 0 is Sunday, 6 is Saturday
+      return day === 0 || day === 6
     },
 
     formatDate(dateString) {
