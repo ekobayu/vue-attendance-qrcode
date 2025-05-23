@@ -6,9 +6,7 @@
       <div class="form-group">
         <label for="session-type">Session Type:</label>
         <select id="session-type" v-model="sessionType">
-          <option value="morning">Morning Session (6 AM - 6 PM)</option>
-          <option value="day">Day Session (8 AM - 6 PM)</option>
-          <option value="full-day">Full Day Session (24 Hours)</option>
+          <option value="morning">Morning (07.30 AM - 04.30 PM)</option>
           <option value="custom">Custom Session</option>
         </select>
       </div>
@@ -44,6 +42,7 @@
     </div>
 
     <div v-else class="active-session">
+      <!-- Rest of the template remains the same -->
       <div class="session-info">
         <h3>Active Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
@@ -103,9 +102,9 @@ export default {
   },
   data() {
     return {
-      sessionType: 'day',
-      startTime: '08:00',
-      endTime: '18:00',
+      sessionType: 'morning',
+      startTime: '07:30',
+      endTime: '16:30',
       sessionDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
       autoReset: true,
       qrValue: '',
@@ -122,6 +121,12 @@ export default {
   computed: {
     formatCountdown() {
       if (!this.timeUntilReset) return 'Calculating...'
+
+      // Check if timeUntilReset is valid
+      if (isNaN(this.timeUntilReset)) {
+        console.error('Invalid timeUntilReset value:', this.timeUntilReset)
+        return 'Invalid time'
+      }
 
       const hours = Math.floor(this.timeUntilReset / 3600000)
       const minutes = Math.floor((this.timeUntilReset % 3600000) / 60000)
@@ -246,15 +251,23 @@ export default {
         if (this.isWeekend(today)) {
           console.log('Auto-reset skipped: Today is a weekend')
 
-          // Instead of creating a new session, just update the next reset time
-          // to tomorrow and keep the current session active
-          const nextDay = new Date()
-          nextDay.setDate(nextDay.getDate() + 1)
-          nextDay.setHours(8, 0, 0, 0) // Reset at 8 AM tomorrow
+          // Get auto-reset settings
+          const settingsRef = dbRef(db, 'settings/autoReset')
+          const settingsSnapshot = await get(settingsRef)
+          const resetSettings = settingsSnapshot.exists()
+            ? settingsSnapshot.val()
+            : {
+                resetTime: '07:30',
+                resetHours: 16
+              }
 
+          // Calculate next reset time that falls on a weekday
+          const nextResetTime = this.calculateNextResetTime(resetSettings)
+
+          // Update active session with new reset time
           const updatedSession = {
             ...currentSession,
-            nextResetTime: nextDay.getTime()
+            nextResetTime: nextResetTime
           }
 
           // Update active session with new reset time
@@ -274,21 +287,18 @@ export default {
         // Create a new session ID
         const newSessionId = 'session-' + Date.now().toString()
 
-        // Calculate new reset time (24 hours from now)
-        // const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
-
         // Get auto-reset settings
         const settingsRef = dbRef(db, 'settings/autoReset')
         const settingsSnapshot = await get(settingsRef)
         const resetSettings = settingsSnapshot.exists()
           ? settingsSnapshot.val()
           : {
-              resetHours: 16, // Default to 16 hours
-              resetTime: '08:00' // Default to 8 AM
+              resetTime: '07:30',
+              resetHours: 16
             }
 
         // Calculate next reset time based on settings
-        const calculatedNextResetTime = this.calculateNextResetTime(resetSettings)
+        const nextResetTime = this.calculateNextResetTime(resetSettings)
 
         // Create new session data with today's date
         const newSessionData = {
@@ -298,7 +308,7 @@ export default {
           createdAt: Date.now(),
           type: currentSession.type,
           autoReset: true,
-          nextResetTime: calculatedNextResetTime
+          nextResetTime: nextResetTime
         }
 
         // Save new session
@@ -330,24 +340,10 @@ export default {
 
       switch (sessionType) {
         case 'morning': {
-          // 6 AM
+          // 7:30 AM
           const morningStart = new Date(selectedDate)
-          morningStart.setHours(6, 0, 0, 0)
+          morningStart.setHours(7, 30, 0, 0)
           return morningStart.getTime()
-        }
-
-        case 'day': {
-          // 8 AM
-          const dayStart = new Date(selectedDate)
-          dayStart.setHours(8, 0, 0, 0)
-          return dayStart.getTime()
-        }
-
-        case 'full-day': {
-          // Midnight
-          const fullDayStart = new Date(selectedDate)
-          fullDayStart.setHours(0, 0, 0, 0)
-          return fullDayStart.getTime()
         }
 
         case 'custom': {
@@ -358,16 +354,16 @@ export default {
             customStart.setHours(originalStartDate.getHours(), originalStartDate.getMinutes(), 0, 0)
             return customStart.getTime()
           }
-          // Default to 8 AM if no active session
+          // Default to 7:30 AM if no active session
           const defaultStart = new Date(selectedDate)
-          defaultStart.setHours(8, 0, 0, 0)
+          defaultStart.setHours(7, 30, 0, 0)
           return defaultStart.getTime()
         }
 
         default: {
-          // Default to 8 AM
+          // Default to 7:30 AM
           const defaultStartTime = new Date(selectedDate)
-          defaultStartTime.setHours(8, 0, 0, 0)
+          defaultStartTime.setHours(7, 30, 0, 0)
           return defaultStartTime.getTime()
         }
       }
@@ -377,19 +373,11 @@ export default {
       const selectedDate = new Date(dateString)
 
       switch (sessionType) {
-        case 'morning':
-        case 'day': {
-          // 6 PM
+        case 'morning': {
+          // 4:30 PM
           const eveningEnd = new Date(selectedDate)
-          eveningEnd.setHours(18, 0, 0, 0)
+          eveningEnd.setHours(16, 30, 0, 0)
           return eveningEnd.getTime()
-        }
-
-        case 'full-day': {
-          // 11:59:59 PM
-          const fullDayEnd = new Date(selectedDate)
-          fullDayEnd.setHours(23, 59, 59, 999)
-          return fullDayEnd.getTime()
         }
 
         case 'custom': {
@@ -400,16 +388,16 @@ export default {
             customEnd.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), 0, 0)
             return customEnd.getTime()
           }
-          // Default to 6 PM if no active session
+          // Default to 4:30 PM if no active session
           const defaultEnd = new Date(selectedDate)
-          defaultEnd.setHours(18, 0, 0, 0)
+          defaultEnd.setHours(16, 30, 0, 0)
           return defaultEnd.getTime()
         }
 
         default: {
-          // Default to 6 PM
+          // Default to 4:30 PM
           const defaultEndTime = new Date(selectedDate)
-          defaultEndTime.setHours(18, 0, 0, 0)
+          defaultEndTime.setHours(16, 30, 0, 0)
           return defaultEndTime.getTime()
         }
       }
@@ -456,29 +444,37 @@ export default {
     },
 
     calculateNextResetTime(settings) {
+      // Get the reset time and hours from settings
+      const resetTimeStr = settings.resetTime || '07:30'
+      const resetHours = settings.resetHours || 16 // Default to 16 hours if not set
+      const [hours, minutes] = resetTimeStr.split(':').map(Number)
+
+      // Get current date
       const now = new Date()
-      const [hours, minutes] = settings.resetTime.split(':').map(Number)
 
-      // Set next reset time to today at specified time
-      const nextReset = new Date(now)
-      nextReset.setHours(hours, minutes, 0, 0)
+      // Set target time to today at the specified reset time
+      const targetDate = new Date(now)
+      targetDate.setHours(hours, minutes, 0, 0)
 
-      // If that time has already passed today, add one day
-      if (nextReset <= now) {
-        nextReset.setDate(nextReset.getDate() + 1)
+      // If that time has already passed today, add the specified reset hours
+      if (targetDate <= now) {
+        targetDate.setTime(targetDate.getTime() + resetHours * 60 * 60 * 1000)
       }
 
-      // If the next reset falls on a weekend, skip to Monday
-      const day = nextReset.getDay()
+      // If the target date falls on a weekend, skip to Monday
+      const day = targetDate.getDay()
       if (day === 0) {
         // Sunday
-        nextReset.setDate(nextReset.getDate() + 1) // Skip to Monday
+        targetDate.setDate(targetDate.getDate() + 1) // Skip to Monday
+        targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
       } else if (day === 6) {
         // Saturday
-        nextReset.setDate(nextReset.getDate() + 2) // Skip to Monday
+        targetDate.setDate(targetDate.getDate() + 2) // Skip to Monday
+        targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
       }
 
-      return nextReset.getTime()
+      console.log('Next reset time calculated:', targetDate.toString())
+      return targetDate.getTime()
     },
 
     async generateQRCode() {
@@ -490,26 +486,12 @@ export default {
         let startDateTime, endDateTime
 
         if (this.sessionType === 'morning') {
-          // 6 AM - 6 PM (12 hours)
+          // 7:30 AM - 4:30 PM (9 hours)
           startDateTime = new Date(selectedDate)
-          startDateTime.setHours(6, 0, 0, 0)
+          startDateTime.setHours(7, 30, 0, 0)
 
           endDateTime = new Date(selectedDate)
-          endDateTime.setHours(18, 0, 0, 0)
-        } else if (this.sessionType === 'day') {
-          // 8 AM - 6 PM (10 hours)
-          startDateTime = new Date(selectedDate)
-          startDateTime.setHours(8, 0, 0, 0)
-
-          endDateTime = new Date(selectedDate)
-          endDateTime.setHours(18, 0, 0, 0)
-        } else if (this.sessionType === 'full-day') {
-          // 24 hours (midnight to midnight)
-          startDateTime = new Date(selectedDate)
-          startDateTime.setHours(0, 0, 0, 0)
-
-          endDateTime = new Date(selectedDate)
-          endDateTime.setHours(23, 59, 59, 999)
+          endDateTime.setHours(16, 30, 0, 0)
         } else {
           // Custom times
           const [startHour, startMinute] = this.startTime.split(':').map(Number)
@@ -525,17 +507,14 @@ export default {
         // Create a unique session ID
         this.sessionId = 'session-' + Date.now().toString()
 
-        // Calculate next reset time (24 hours from now)
-        // const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
-
         // Get auto-reset settings
         const settingsRef = dbRef(db, 'settings/autoReset')
         const settingsSnapshot = await get(settingsRef)
         const resetSettings = settingsSnapshot.exists()
           ? settingsSnapshot.val()
           : {
-              resetHours: 16, // Default to 16 hours
-              resetTime: '08:00' // Default to 8 AM
+              resetTime: '07:30',
+              resetHours: 16
             }
 
         // Calculate next reset time based on settings
@@ -597,8 +576,8 @@ export default {
         const resetSettings = settingsSnapshot.exists()
           ? settingsSnapshot.val()
           : {
-              resetHours: 16, // Default to 16 hours
-              resetTime: '08:00' // Default to 8 AM
+              resetTime: '07:30',
+              resetHours: 16
             }
 
         // Calculate next reset time based on settings
@@ -732,13 +711,15 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'morning') {
-        return 'Morning Session (6 AM - 6 PM)'
-      } else if (type === 'day') {
-        return 'Day Session (8 AM - 6 PM)'
-      } else if (type === 'full-day') {
-        return 'Full Day Session (24 Hours)'
+        return 'Morning Session (07:30 AM - 04:30 PM)'
       } else if (type === 'custom') {
         return 'Custom Session'
+      } else if (type === 'day') {
+        // For backward compatibility
+        return 'Day Session (8 AM - 5 PM)'
+      } else if (type === 'full-day') {
+        // For backward compatibility
+        return 'Full Day Session'
       }
       return type || 'Unknown'
     },
@@ -757,8 +738,17 @@ export default {
 
     formatTime(timestamp) {
       if (!timestamp) return ''
-      const options = { hour: '2-digit', minute: '2-digit', hour12: true }
-      return new Date(timestamp).toLocaleTimeString(undefined, options)
+
+      // Check if timestamp is a string in HH:MM format
+      if (typeof timestamp === 'string' && timestamp.includes(':')) {
+        const [hours, minutes] = timestamp.split(':').map(Number)
+        const date = new Date()
+        date.setHours(hours, minutes, 0, 0)
+        return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })
+      }
+
+      // Otherwise treat as timestamp
+      return new Date(timestamp).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true })
     }
   }
 }
