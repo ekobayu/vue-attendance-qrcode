@@ -93,7 +93,7 @@
       <div v-else-if="selectedDate" class="no-records">No attendance records found for this date.</div>
     </div>
 
-    <!-- Sessions Tab -->
+    <!-- Sessions Tab with Month Grouping -->
     <div v-else-if="activeTab === 'sessions'">
       <div class="session-filters">
         <div class="date-filter">
@@ -113,26 +113,45 @@
       <div class="session-list">
         <h3>Active Sessions</h3>
 
-        <div v-if="filteredSessions.length === 0" class="no-records">No active sessions found.</div>
+        <div v-if="Object.keys(groupedSessions).length === 0" class="no-records">No active sessions found.</div>
 
         <div v-else>
-          <div v-for="session in filteredSessions" :key="session.id" class="session-item">
-            <div class="session-header">
-              <div class="session-date">{{ formatDate(session.date) }}</div>
-              <div class="session-time">{{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}</div>
+          <!-- Loop through each month group -->
+          <div v-for="(sessions, month) in groupedSessions" :key="month" class="month-group">
+            <div class="month-header" @click="toggleSessionMonthExpand(month)">
+              <div class="month-title">
+                <span class="expand-icon">{{ expandedSessionMonths[month] ? '▼' : '►' }}</span>
+                <h4>{{ month }}</h4>
+              </div>
+              <span class="session-count">{{ sessions.length }} sessions</span>
             </div>
 
-            <div class="session-details">
-              <div class="session-info">
-                <div class="session-type">{{ getSessionTypeDisplay(session.type) }}</div>
-                <div class="attendee-count">
-                  <strong>{{ getAttendeeCount(session) }}</strong> attendees
+            <!-- Collapsible session list for this month -->
+            <div v-if="expandedSessionMonths[month]" class="month-sessions">
+              <!-- Loop through sessions in this month -->
+              <div v-for="session in sessions" :key="session.id" class="session-item">
+                <div class="session-header">
+                  <div class="session-date">{{ formatDate(session.date) }}</div>
+                  <div class="session-time">
+                    {{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}
+                  </div>
                 </div>
-              </div>
 
-              <div class="session-actions">
-                <button @click="viewSessionDetails(session)" class="view-btn">View Details</button>
-                <button @click="archiveSession(session)" class="archive-btn" v-if="!session.archived">Archive</button>
+                <div class="session-details">
+                  <div class="session-info">
+                    <div class="session-type">{{ getSessionTypeDisplay(session.type) }}</div>
+                    <div class="attendee-count">
+                      <strong>{{ getAttendeeCount(session) }}</strong> attendees
+                    </div>
+                  </div>
+
+                  <div class="session-actions">
+                    <button @click="viewSessionDetails(session)" class="view-btn">View Details</button>
+                    <button @click="archiveSession(session)" class="archive-btn" v-if="!session.archived">
+                      Archive
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -345,6 +364,8 @@ export default {
       sessionDateFilter: '',
       sessionSearchQuery: '',
       filteredSessions: [],
+      groupedSessions: {},
+      expandedSessionMonths: {},
 
       // Archived session filtering
       archivedDateFilter: '',
@@ -446,7 +467,7 @@ export default {
           this.filterSessions()
         } else {
           this.sessions = []
-          this.filteredSessions = []
+          this.groupedSessions = {}
         }
       })
     },
@@ -488,7 +509,27 @@ export default {
         )
       }
 
-      this.filteredSessions = filtered
+      // Group by month
+      this.groupedSessions = this.groupSessionsByMonth(filtered)
+
+      // Auto-expand the first month or if there's only one month
+      const months = Object.keys(this.groupedSessions)
+
+      // Create a new object for expandedSessionMonths
+      const newExpandedMonths = { ...this.expandedSessionMonths }
+
+      if (months.length === 1) {
+        // If there's only one month, expand it
+        newExpandedMonths[months[0]] = true
+      } else if (months.length > 0 && this.sessionDateFilter) {
+        // If filtering by date, expand all months
+        months.forEach((month) => {
+          newExpandedMonths[month] = true
+        })
+      }
+
+      // Update the expandedSessionMonths object
+      this.expandedSessionMonths = newExpandedMonths
     },
 
     filterArchivedSessions() {
@@ -562,6 +603,14 @@ export default {
       this.expandedMonths = {
         ...this.expandedMonths,
         [month]: !this.expandedMonths[month]
+      }
+    },
+
+    toggleSessionMonthExpand(month) {
+      // Create a new object with the updated value to ensure reactivity
+      this.expandedSessionMonths = {
+        ...this.expandedSessionMonths,
+        [month]: !this.expandedSessionMonths[month]
       }
     },
 
