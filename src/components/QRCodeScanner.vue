@@ -1,9 +1,9 @@
 <template>
   <div class="qr-scanner">
-    <h2>Scan Attendance QR Code</h2>
+    <!-- <h2>Scan Attendance QR Code</h2> -->
 
     <div v-if="!scanning && !attendanceMarked">
-      <p class="instructions">Scan the attendance QR code displayed in office to mark your attendance.</p>
+      <!-- <p class="instructions">Scan the attendance QR code displayed in office to mark your attendance.</p> -->
       <button @click="startScanning" class="scan-btn">Start Scanner</button>
     </div>
 
@@ -242,10 +242,10 @@ export default {
 .qr-scanner {
   max-width: 500px;
   margin: 0 auto;
-  padding: 20px;
+  /* padding: 20px; */
   background-color: #fff;
   border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  /* box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); */
 }
 
 .instructions {

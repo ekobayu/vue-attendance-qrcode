@@ -65,7 +65,7 @@
               <td>{{ getSessionTypeDisplay(attendee.sessionType) }}</td>
               <td>
                 <span :class="attendee.remote ? 'remote-badge' : 'in-person-badge'">
-                  {{ attendee.remote ? 'Remote' : 'In-Person' }}
+                  {{ attendee.remote ? 'Remote' : 'Office' }}
                 </span>
               </td>
               <td>{{ attendee.remote ? attendee.location : 'Office' }}</td>
@@ -298,7 +298,7 @@
                 <td>{{ formatTime(attendee.timestamp) }}</td>
                 <td>
                   <span :class="attendee.remote ? 'remote-badge' : 'in-person-badge'">
-                    {{ attendee.remote ? 'Remote' : 'In-Person' }}
+                    {{ attendee.remote ? 'Remote' : 'Office' }}
                   </span>
                 </td>
                 <td>{{ attendee.remote ? attendee.location : 'Office' }}</td>
@@ -885,7 +885,7 @@ export default {
           attendee.email,
           this.formatTime(attendee.timestamp),
           this.getSessionTypeDisplay(attendee.sessionType),
-          attendee.remote ? 'Remote' : 'In-Person',
+          attendee.remote ? 'Remote' : 'Office',
           attendee.remote ? attendee.location : 'Office'
         ]
         csvContent += row.join(',') + '\n'
@@ -909,7 +909,7 @@ export default {
           index + 1,
           attendee.email,
           this.formatTime(attendee.timestamp),
-          attendee.remote ? 'Remote' : 'In-Person',
+          attendee.remote ? 'Remote' : 'Office',
           attendee.remote ? attendee.location : 'Office'
         ]
         csvContent += row.join(',') + '\n'

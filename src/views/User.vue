@@ -31,8 +31,8 @@
       <div v-if="activeTab === 'mark'" class="tab-content">
         <div class="attendance-options">
           <div class="option-card">
-            <h3>In-Person Attendance</h3>
-            <p>Scan the QR code displayed in your office.</p>
+            <h3>Office Attendance</h3>
+            <p>Scan the attendance QR code displayed in office to mark your attendance.</p>
             <div class="attendance-card">
               <QRCodeScanner />
             </div>
@@ -60,7 +60,7 @@
               <div class="record-details">
                 <div class="timestamp">{{ formatTime(record.timestamp) }}</div>
                 <div class="badge" :class="record.remote ? 'remote-badge' : 'in-person-badge'">
-                  {{ record.remote ? 'Remote' : 'In-Person' }}
+                  {{ record.remote ? 'Remote' : 'Office' }}
                 </div>
               </div>
             </div>
@@ -94,7 +94,7 @@
           </div>
           <div class="stat-card">
             <div class="stat-value">{{ inPersonCount }}</div>
-            <div class="stat-label">In-Person</div>
+            <div class="stat-label">Office</div>
           </div>
           <div class="stat-card">
             <div class="stat-value">{{ remoteCount }}</div>
@@ -127,7 +127,7 @@
                     {{ getSessionTypeDisplay(record.sessionType) }}
                   </div>
                   <div class="badge" :class="record.remote ? 'remote-badge' : 'in-person-badge'">
-                    {{ record.remote ? 'Remote' : 'In-Person' }}
+                    {{ record.remote ? 'Remote' : 'Office' }}
                   </div>
                   <div class="location" v-if="record.remote && record.location">
                     {{ record.location }}
@@ -598,13 +598,15 @@ export default {
 }
 
 .remote-btn {
-  display: inline-block;
+  display: block;
   background-color: #2196f3;
   color: white;
   padding: 10px 20px;
   text-decoration: none;
   border-radius: 4px;
-  margin-top: 15px;
+  text-align: center;
+  margin: 20px auto;
+  max-width: 200px;
 }
 
 .attendance-history {
