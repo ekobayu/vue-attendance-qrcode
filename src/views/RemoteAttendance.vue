@@ -35,7 +35,37 @@
 
         <div class="form-group">
           <label for="location">Working From:</label>
-          <input type="text" id="location" v-model="location" placeholder="e.g. Home Office, Cafe, etc." />
+          <div class="location-input">
+            <input type="text" id="location" v-model="location" placeholder="e.g. Home Office, Cafe, etc." />
+            <button
+              @click="getCurrentLocation"
+              class="location-btn"
+              :disabled="gettingLocation"
+              :title="locationSupported ? 'Get current location' : 'Geolocation not supported'"
+            >
+              <span v-if="gettingLocation" class="loading-spinner"></span>
+              <span v-else class="location-icon">📍</span>
+            </button>
+          </div>
+          <small v-if="locationStatus" :class="['location-status', locationStatusType]">
+            {{ locationStatus }}
+          </small>
+
+          <!-- Common locations dropdown -->
+          <div class="common-locations">
+            <label class="small-label">Quick select:</label>
+            <div class="location-chips">
+              <button
+                v-for="(loc, index) in commonLocations"
+                :key="index"
+                @click="location = loc"
+                class="location-chip"
+                type="button"
+              >
+                {{ loc }}
+              </button>
+            </div>
+          </div>
         </div>
 
         <div class="form-group">
@@ -88,7 +118,12 @@ export default {
       markTime: null,
       markDate: null,
       sessionType: '',
-      error: null
+      error: null,
+      gettingLocation: false,
+      locationStatus: '',
+      locationStatusType: 'info',
+      locationSupported: 'geolocation' in navigator,
+      commonLocations: ['Home', 'Coffee Shop', 'Co-working Space', 'Library', 'Client Site']
     }
   },
   created() {
@@ -103,6 +138,145 @@ export default {
     })
   },
   methods: {
+    getCurrentLocation() {
+      if (!this.locationSupported) {
+        this.locationStatus = 'Geolocation is not supported by your browser'
+        this.locationStatusType = 'error'
+        return
+      }
+
+      this.gettingLocation = true
+      this.locationStatus = 'Getting your location...'
+      this.locationStatusType = 'info'
+
+      // Try IP-based geolocation as a fallback
+      const tryIpBasedLocation = async () => {
+        try {
+          // Use a free IP geolocation API
+          const response = await fetch('https://ipapi.co/json/')
+          if (!response.ok) throw new Error('IP location service unavailable')
+
+          const data = await response.json()
+          if (data.error) throw new Error(data.reason || 'IP location failed')
+
+          let locationText = ''
+
+          if (data.city && data.country_name) {
+            locationText = `${data.city}, ${data.region || ''} ${data.country_name}`
+          } else if (data.country_name) {
+            locationText = data.country_name
+          } else {
+            throw new Error('Location details not available')
+          }
+
+          this.location = locationText.trim()
+          this.locationStatus = 'Location detected via IP address'
+          this.locationStatusType = 'success'
+        } catch (error) {
+          console.error('IP geolocation error:', error)
+          this.locationStatus = 'Could not detect your location automatically. Please enter it manually.'
+          this.locationStatusType = 'error'
+        } finally {
+          this.gettingLocation = false
+        }
+      }
+
+      // Try browser geolocation first
+      navigator.geolocation.getCurrentPosition(
+        // Success callback
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords
+
+            // Get location name from coordinates using reverse geocoding
+            const response = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`,
+              {
+                headers: {
+                  'User-Agent': 'AttendanceApp/1.0' // Add a user agent to comply with Nominatim usage policy
+                }
+              }
+            )
+
+            if (!response.ok) {
+              throw new Error('Failed to get location name')
+            }
+
+            const data = await response.json()
+
+            // Format the location
+            let locationName = ''
+
+            if (data.address) {
+              const address = data.address
+
+              // Try to create a meaningful location name
+              if (address.road) {
+                locationName = address.road
+
+                if (address.house_number) {
+                  locationName = `${address.house_number} ${locationName}`
+                }
+
+                if (address.suburb || address.neighbourhood) {
+                  locationName += `, ${address.suburb || address.neighbourhood}`
+                }
+
+                if (address.city || address.town || address.village) {
+                  locationName += `, ${address.city || address.town || address.village}`
+                }
+              } else if (data.display_name) {
+                // Fall back to display name if no road
+                locationName = data.display_name
+              }
+            } else if (data.display_name) {
+              locationName = data.display_name
+            }
+
+            // Set the location
+            if (locationName) {
+              this.location = locationName
+              this.locationStatus = 'Location detected successfully'
+              this.locationStatusType = 'success'
+            } else {
+              this.location = `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`
+              this.locationStatus = 'Location coordinates detected'
+              this.locationStatusType = 'success'
+            }
+          } catch (error) {
+            console.error('Error getting location name:', error)
+
+            // Try to use just the coordinates
+            try {
+              const { latitude, longitude } = position.coords
+              this.location = `Lat: ${latitude.toFixed(6)}, Lng: ${longitude.toFixed(6)}`
+              this.locationStatus = 'Location coordinates detected'
+              this.locationStatusType = 'success'
+            } catch (coordError) {
+              console.error('Error using coordinates:', coordError)
+              // Fall back to IP-based location
+              await tryIpBasedLocation()
+            }
+          } finally {
+            this.gettingLocation = false
+          }
+        },
+        // Error callback
+        async () => {
+          // console.error('Geolocation error:', error)
+
+          // Try IP-based geolocation as fallback
+          await tryIpBasedLocation()
+        },
+        // Options
+        {
+          enableHighAccuracy: false, // Set to false to improve success rate
+          timeout: 10000,
+          maximumAge: 60000 // Allow cached positions up to 1 minute old
+        }
+      )
+    },
+
     checkActiveSession() {
       // Check if there's a session ID in the URL
       const urlParams = new URLSearchParams(window.location.search)
@@ -171,9 +345,9 @@ export default {
 
           // Get session type
           if (data.sessionType === 'morning') {
-            this.sessionType = 'Morning Session (6 AM - 6 PM)'
+            this.sessionType = 'Morning Session (07:30 AM - 04:30 PM)'
           } else if (data.sessionType === 'day') {
-            this.sessionType = 'Day Session (8 AM - 6 PM)'
+            this.sessionType = 'Day Session (08:00 AM - 05:00 PM)'
           } else {
             this.sessionType = 'Custom Session'
           }
@@ -206,6 +380,7 @@ export default {
 
         if (snapshot.exists()) {
           this.error = 'You have already marked your attendance for this session'
+          this.submitting = false
           return
         }
 
@@ -215,9 +390,9 @@ export default {
 
         // Set session type
         if (this.activeSession.type === 'morning') {
-          this.sessionType = 'Morning Session (6 AM - 6 PM)'
+          this.sessionType = 'Morning Session (07:30 AM - 04:30 PM)'
         } else if (this.activeSession.type === 'day') {
-          this.sessionType = 'Day Session (8 AM - 6 PM)'
+          this.sessionType = 'Day Session (08:00 AM - 05:00 PM)'
         } else {
           this.sessionType = 'Custom Session'
         }
@@ -266,9 +441,9 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'morning') {
-        return 'Morning Session (6 AM - 6 PM)'
+        return 'Morning Session (07:30 AM - 04:30 PM)'
       } else if (type === 'day') {
-        return 'Day Session (8 AM - 6 PM)'
+        return 'Day Session (08:00 AM - 05:00 PM)'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
@@ -366,6 +541,101 @@ textarea {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+}
+
+.location-input {
+  display: flex;
+  gap: 10px;
+}
+
+.location-input input {
+  flex: 1;
+}
+
+.location-btn {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 40px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.location-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
+
+.location-icon {
+  font-size: 18px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: white;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.location-status {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.location-status.success {
+  color: #4caf50;
+}
+
+.location-status.error {
+  color: #f44336;
+}
+
+.location-status.info {
+  color: #2196f3;
+}
+
+.common-locations {
+  margin-top: 10px;
+}
+
+.small-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 5px;
+  display: block;
+}
+
+.location-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.location-chip {
+  background-color: #e0e0e0;
+  border: none;
+  border-radius: 16px;
+  padding: 5px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.location-chip:hover {
+  background-color: #d0d0d0;
 }
 
 textarea {
