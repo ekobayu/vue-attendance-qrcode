@@ -34,7 +34,7 @@
         <label for="auto-reset">Auto Reset:</label>
         <div class="checkbox-container">
           <input type="checkbox" id="auto-reset" v-model="autoReset" />
-          <span class="checkbox-label">Automatically reset QR code every 24 hours</span>
+          <span class="checkbox-label">Automatically reset QR code</span>
         </div>
       </div>
 
@@ -53,7 +53,7 @@
         <p><strong>Attendees:</strong> {{ attendeeCount }}</p>
         <p v-if="activeSession.autoReset" class="auto-reset-info">
           <span class="auto-reset-badge">Auto Reset</span>
-          QR code will automatically reset every 24 hours
+          QR code will automatically reset
         </p>
       </div>
 
@@ -294,6 +294,22 @@ export default {
       })
     },
 
+    calculateNextResetTime(settings) {
+      const now = new Date()
+      const [hours, minutes] = settings.resetTime.split(':').map(Number)
+
+      // Set next reset time to today at specified time
+      const nextReset = new Date(now)
+      nextReset.setHours(hours, minutes, 0, 0)
+
+      // If that time has already passed today, add specified hours
+      if (nextReset <= now) {
+        nextReset.setTime(nextReset.getTime() + settings.resetHours * 60 * 60 * 1000)
+      }
+
+      return nextReset.getTime()
+    },
+
     async generateQRCode() {
       this.loading = true
 
@@ -339,7 +355,20 @@ export default {
         this.sessionId = 'session-' + Date.now().toString()
 
         // Calculate next reset time (24 hours from now)
-        const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
+        // const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
+
+        // Get auto-reset settings
+        const settingsRef = dbRef(db, 'settings/autoReset')
+        const settingsSnapshot = await get(settingsRef)
+        const resetSettings = settingsSnapshot.exists()
+          ? settingsSnapshot.val()
+          : {
+              resetHours: 16, // Default to 16 hours
+              resetTime: '08:00' // Default to 8 AM
+            }
+
+        // Calculate next reset time based on settings
+        const nextResetTime = this.calculateNextResetTime(resetSettings)
 
         // Create attendance session in Firebase
         const sessionData = {

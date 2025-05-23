@@ -12,6 +12,7 @@
         <button @click="activeTab = 'qrcode'" :class="{ active: activeTab === 'qrcode' }">Attendance QR Code</button>
         <button @click="activeTab = 'records'" :class="{ active: activeTab === 'records' }">Attendance Records</button>
         <button @click="activeTab = 'users'" :class="{ active: activeTab === 'users' }">User Management</button>
+        <button @click="activeTab = 'settings'" :class="{ active: activeTab === 'settings' }">Settings</button>
       </div>
 
       <div class="admin-dashboard" v-if="activeTab === 'qrcode'">
@@ -32,6 +33,7 @@
         <QRCodeGenerator v-if="activeTab === 'qrcode'" />
         <AttendanceList v-if="activeTab === 'records'" />
         <UserManagement v-if="activeTab === 'users'" />
+        <AutoResetSettings v-if="activeTab === 'settings'" />
       </div>
     </div>
   </div>
@@ -44,13 +46,15 @@ import { ref as dbRef, get, onValue, set, remove } from 'firebase/database'
 import QRCodeGenerator from '../components/QRCodeGenerator.vue'
 import AttendanceList from '../components/AttendanceList.vue'
 import UserManagement from '../components/UserManagement.vue'
+import AutoResetSettings from '../components/AutoResetSettings.vue'
 
 export default {
   name: 'AdminPage',
   components: {
     QRCodeGenerator,
     AttendanceList,
-    UserManagement
+    UserManagement,
+    AutoResetSettings
   },
   data() {
     return {
