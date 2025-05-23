@@ -144,7 +144,33 @@ export default {
   methods: {
     async checkActiveSessionAndReset() {
       try {
-        // Get active session
+        // Check for reset flag first (set by other clients)
+        const resetFlagRef = dbRef(db, 'reset-needed')
+        const resetFlagSnapshot = await get(resetFlagRef)
+
+        if (resetFlagSnapshot.exists()) {
+          const resetFlag = resetFlagSnapshot.val()
+          console.log('Reset flag found, checking if action needed...')
+
+          // Get active session
+          const activeSessionRef = dbRef(db, 'active-session')
+          const activeSessionSnapshot = await get(activeSessionRef)
+
+          if (activeSessionSnapshot.exists()) {
+            const activeSession = activeSessionSnapshot.val()
+
+            // If the flag is for the current active session, perform reset
+            if (resetFlag.sessionId === activeSession.sessionId) {
+              console.log('Performing reset based on flag...')
+              await this.performAutoReset(activeSession)
+
+              // Clear the flag
+              await remove(resetFlagRef)
+            }
+          }
+        }
+
+        // Now check if the active session itself needs reset
         const activeSessionRef = dbRef(db, 'active-session')
         const snapshot = await get(activeSessionRef)
 
@@ -216,18 +242,34 @@ export default {
         // Create a new session ID
         const newSessionId = 'session-' + Date.now().toString()
 
-        // Calculate new reset time (24 hours from now)
-        const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0]
 
-        // Create new session data
+        // Calculate new reset time (24 hours from now)
+        // const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
+
+        // Get auto-reset settings
+        const settingsRef = dbRef(db, 'settings/autoReset')
+        const settingsSnapshot = await get(settingsRef)
+        const resetSettings = settingsSnapshot.exists()
+          ? settingsSnapshot.val()
+          : {
+              resetHours: 16, // Default to 16 hours
+              resetTime: '08:00' // Default to 8 AM
+            }
+
+        // Calculate next reset time based on settings
+        const calculatedNextResetTime = this.calculateNextResetTime(resetSettings)
+
+        // Create new session data with today's date
         const newSessionData = {
-          date: currentSession.date,
-          startTime: currentSession.startTime,
-          endTime: currentSession.endTime,
+          date: today, // Use today's date for the new session
+          startTime: this.calculateSessionStartTime(currentSession.type, today),
+          endTime: this.calculateSessionEndTime(currentSession.type, today),
           createdAt: Date.now(),
           type: currentSession.type,
           autoReset: true,
-          nextResetTime: nextResetTime
+          nextResetTime: calculatedNextResetTime
         }
 
         // Save new session
@@ -251,6 +293,96 @@ export default {
         console.log('QR code auto-reset complete')
       } catch (error) {
         console.error('Error during auto-reset:', error)
+      }
+    },
+
+    calculateSessionStartTime(sessionType, dateString) {
+      const selectedDate = new Date(dateString)
+
+      switch (sessionType) {
+        case 'morning': {
+          // 6 AM
+          const morningStart = new Date(selectedDate)
+          morningStart.setHours(6, 0, 0, 0)
+          return morningStart.getTime()
+        }
+
+        case 'day': {
+          // 8 AM
+          const dayStart = new Date(selectedDate)
+          dayStart.setHours(8, 0, 0, 0)
+          return dayStart.getTime()
+        }
+
+        case 'full-day': {
+          // Midnight
+          const fullDayStart = new Date(selectedDate)
+          fullDayStart.setHours(0, 0, 0, 0)
+          return fullDayStart.getTime()
+        }
+
+        case 'custom': {
+          // Use the original session's start time but with today's date
+          if (this.activeSession && this.activeSession.startTime) {
+            const originalStartDate = new Date(this.activeSession.startTime)
+            const customStart = new Date(selectedDate)
+            customStart.setHours(originalStartDate.getHours(), originalStartDate.getMinutes(), 0, 0)
+            return customStart.getTime()
+          }
+          // Default to 8 AM if no active session
+          const defaultStart = new Date(selectedDate)
+          defaultStart.setHours(8, 0, 0, 0)
+          return defaultStart.getTime()
+        }
+
+        default: {
+          // Default to 8 AM
+          const defaultStartTime = new Date(selectedDate)
+          defaultStartTime.setHours(8, 0, 0, 0)
+          return defaultStartTime.getTime()
+        }
+      }
+    },
+
+    calculateSessionEndTime(sessionType, dateString) {
+      const selectedDate = new Date(dateString)
+
+      switch (sessionType) {
+        case 'morning':
+        case 'day': {
+          // 6 PM
+          const eveningEnd = new Date(selectedDate)
+          eveningEnd.setHours(18, 0, 0, 0)
+          return eveningEnd.getTime()
+        }
+
+        case 'full-day': {
+          // 11:59:59 PM
+          const fullDayEnd = new Date(selectedDate)
+          fullDayEnd.setHours(23, 59, 59, 999)
+          return fullDayEnd.getTime()
+        }
+
+        case 'custom': {
+          // Use the original session's end time but with today's date
+          if (this.activeSession && this.activeSession.endTime) {
+            const originalEndDate = new Date(this.activeSession.endTime)
+            const customEnd = new Date(selectedDate)
+            customEnd.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), 0, 0)
+            return customEnd.getTime()
+          }
+          // Default to 6 PM if no active session
+          const defaultEnd = new Date(selectedDate)
+          defaultEnd.setHours(18, 0, 0, 0)
+          return defaultEnd.getTime()
+        }
+
+        default: {
+          // Default to 6 PM
+          const defaultEndTime = new Date(selectedDate)
+          defaultEndTime.setHours(18, 0, 0, 0)
+          return defaultEndTime.getTime()
+        }
       }
     },
 
@@ -409,14 +541,27 @@ export default {
         const oldSessionId = this.sessionId
         this.sessionId = 'session-' + Date.now().toString()
 
-        // Calculate new reset time (24 hours from now)
-        const nextResetTime = Date.now() + 24 * 60 * 60 * 1000
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date().toISOString().split('T')[0]
 
-        // Copy session data to new ID
+        // Get auto-reset settings
+        const settingsRef = dbRef(db, 'settings/autoReset')
+        const settingsSnapshot = await get(settingsRef)
+        const resetSettings = settingsSnapshot.exists()
+          ? settingsSnapshot.val()
+          : {
+              resetHours: 16, // Default to 16 hours
+              resetTime: '08:00' // Default to 8 AM
+            }
+
+        // Calculate next reset time based on settings
+        const nextResetTime = this.calculateNextResetTime(resetSettings)
+
+        // Create new session data with today's date
         const sessionData = {
-          date: this.activeSession.date,
-          startTime: this.activeSession.startTime,
-          endTime: this.activeSession.endTime,
+          date: today, // Use today's date for the new session
+          startTime: this.calculateSessionStartTime(this.activeSession.type, today),
+          endTime: this.calculateSessionEndTime(this.activeSession.type, today),
           createdAt: Date.now(),
           type: this.activeSession.type,
           autoReset: this.activeSession.autoReset,
@@ -433,8 +578,6 @@ export default {
           ...sessionData,
           sessionId: this.sessionId
         })
-
-        // The active session will be updated by the onValue listener
 
         // Archive the old session
         const archiveRef = dbRef(db, `archived-sessions/${oldSessionId}`)
