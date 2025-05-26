@@ -68,6 +68,7 @@
         <div class="action-buttons">
           <button @click="printQRCode" class="print-btn">Print QR Code</button>
           <button @click="refreshQRCode" class="refresh-btn">Refresh QR Code</button>
+          <!-- <button @click="manualReset" class="manual-reset-btn">Manual Reset</button> -->
           <button @click="endSession" class="end-btn">End Session</button>
         </div>
       </div>
@@ -149,31 +150,7 @@ export default {
   methods: {
     async checkActiveSessionAndReset() {
       try {
-        // Check for reset flag first (set by other clients)
-        const resetFlagRef = dbRef(db, 'reset-needed')
-        const resetFlagSnapshot = await get(resetFlagRef)
-
-        if (resetFlagSnapshot.exists()) {
-          const resetFlag = resetFlagSnapshot.val()
-          console.log('Reset flag found, checking if action needed...')
-
-          // Get active session
-          const activeSessionRef = dbRef(db, 'active-session')
-          const activeSessionSnapshot = await get(activeSessionRef)
-
-          if (activeSessionSnapshot.exists()) {
-            const activeSession = activeSessionSnapshot.val()
-
-            // If the flag is for the current active session, perform reset
-            if (resetFlag.sessionId === activeSession.sessionId) {
-              console.log('Performing reset based on flag...')
-              await this.performAutoReset(activeSession)
-
-              // Clear the flag
-              await remove(resetFlagRef)
-            }
-          }
-        }
+        console.log('Checking for active session and reset conditions...')
 
         // Now check if the active session itself needs reset
         const activeSessionRef = dbRef(db, 'active-session')
@@ -181,12 +158,53 @@ export default {
 
         if (snapshot.exists()) {
           const activeSession = snapshot.val()
+          console.log('Found active session:', {
+            id: activeSession.sessionId,
+            date: activeSession.date,
+            type: activeSession.type,
+            autoReset: activeSession.autoReset,
+            nextResetTime: activeSession.nextResetTime ? new Date(activeSession.nextResetTime).toString() : 'not set'
+          })
 
           // Check if auto-reset is enabled and if it's time to reset
-          if (activeSession.autoReset && activeSession.nextResetTime && Date.now() >= activeSession.nextResetTime) {
-            console.log('Auto-reset time reached, performing reset...')
-            await this.performAutoReset(activeSession)
+          const now = Date.now()
+          if (activeSession.autoReset && activeSession.nextResetTime) {
+            const timeUntilReset = activeSession.nextResetTime - now
+            console.log(`Time until reset: ${Math.floor(timeUntilReset / 60000)} minutes`)
+
+            if (now >= activeSession.nextResetTime) {
+              console.log('Auto-reset time reached, performing reset...')
+              await this.performAutoReset(activeSession)
+            }
+          } else if (activeSession.autoReset && !activeSession.nextResetTime) {
+            // If auto-reset is enabled but no nextResetTime is set, set it to tomorrow at 7:30 AM
+            console.log('Auto-reset is enabled but no nextResetTime is set')
+
+            // Calculate next reset time - always set to tomorrow at 7:30 AM
+            const tomorrow = new Date()
+            tomorrow.setDate(tomorrow.getDate() + 1)
+            tomorrow.setHours(7, 30, 0, 0)
+
+            // If tomorrow is a weekend, adjust to Monday
+            if (tomorrow.getDay() === 0) {
+              // Sunday
+              tomorrow.setDate(tomorrow.getDate() + 1) // Skip to Monday
+            } else if (tomorrow.getDay() === 6) {
+              // Saturday
+              tomorrow.setDate(tomorrow.getDate() + 2) // Skip to Monday
+            }
+
+            const nextResetTime = tomorrow.getTime()
+            console.log('Setting next reset time to:', tomorrow.toString())
+
+            // Update the session with the next reset time
+            await set(activeSessionRef, {
+              ...activeSession,
+              nextResetTime: nextResetTime
+            })
           }
+        } else {
+          console.log('No active session found')
         }
 
         // After potential reset, set up the regular listener
@@ -241,8 +259,11 @@ export default {
 
     async performAutoReset(currentSession) {
       try {
+        console.log('Starting auto-reset process...')
+
         // Get current session details
         const oldSessionId = currentSession.sessionId
+        const now = Date.now()
 
         // Get today's date in YYYY-MM-DD format
         const today = new Date().toISOString().split('T')[0]
@@ -251,155 +272,127 @@ export default {
         if (this.isWeekend(today)) {
           console.log('Auto-reset skipped: Today is a weekend')
 
-          // Get auto-reset settings
-          const settingsRef = dbRef(db, 'settings/autoReset')
-          const settingsSnapshot = await get(settingsRef)
-          const resetSettings = settingsSnapshot.exists()
-            ? settingsSnapshot.val()
-            : {
-                resetTime: '07:30',
-                resetHours: 16
-              }
+          // Calculate next reset time for Monday
+          const nextMonday = new Date()
+          // Add days until we reach Monday (1 = Monday, 0 = Sunday)
+          const daysUntilMonday = nextMonday.getDay() === 0 ? 1 : nextMonday.getDay() === 6 ? 2 : 1
+          nextMonday.setDate(nextMonday.getDate() + daysUntilMonday)
+          nextMonday.setHours(7, 30, 0, 0) // Set to 7:30 AM on Monday
 
-          // Calculate next reset time that falls on a weekday
-          const nextResetTime = this.calculateNextResetTime(resetSettings)
-
-          // Update active session with new reset time
-          const updatedSession = {
-            ...currentSession,
-            nextResetTime: nextResetTime
-          }
+          console.log('Next reset scheduled for Monday:', nextMonday.toString())
 
           // Update active session with new reset time
           const activeSessionRef = dbRef(db, 'active-session')
-          await set(activeSessionRef, updatedSession)
-
-          // Also update the session in the sessions collection
-          const sessionRef = dbRef(db, `attendance-sessions/${currentSession.sessionId}`)
-          await set(sessionRef, {
-            ...updatedSession,
-            sessionId: undefined // Don't store sessionId in the sessions collection
+          await set(activeSessionRef, {
+            ...currentSession,
+            nextResetTime: nextMonday.getTime()
           })
 
-          return // Exit early, don't create a new session
+          return false // Exit early, don't create a new session
         }
 
         // Create a new session ID
-        const newSessionId = 'session-' + Date.now().toString()
+        const newSessionId = 'session-' + now.toString()
 
-        // Get auto-reset settings
-        const settingsRef = dbRef(db, 'settings/autoReset')
-        const settingsSnapshot = await get(settingsRef)
-        const resetSettings = settingsSnapshot.exists()
-          ? settingsSnapshot.val()
-          : {
-              resetTime: '07:30',
-              resetHours: 16
-            }
+        // Calculate next reset time - always set to tomorrow at 7:30 AM
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(7, 30, 0, 0)
 
-        // Calculate next reset time based on settings
-        const nextResetTime = this.calculateNextResetTime(resetSettings)
+        // If tomorrow is a weekend, adjust to Monday
+        if (tomorrow.getDay() === 0) {
+          // Sunday
+          tomorrow.setDate(tomorrow.getDate() + 1) // Skip to Monday
+        } else if (tomorrow.getDay() === 6) {
+          // Saturday
+          tomorrow.setDate(tomorrow.getDate() + 2) // Skip to Monday
+        }
 
-        // Create new session data with today's date
+        const nextResetTime = tomorrow.getTime()
+        console.log('Next reset time set to:', tomorrow.toString())
+
+        // Create new session data with today's date - always morning session
         const newSessionData = {
-          date: today, // Use today's date for the new session
-          startTime: this.calculateSessionStartTime(currentSession.type, today),
-          endTime: this.calculateSessionEndTime(currentSession.type, today),
-          createdAt: Date.now(),
-          type: currentSession.type,
+          date: today,
+          startTime: this.calculateSessionStartTime('morning', today),
+          endTime: this.calculateSessionEndTime('morning', today),
+          createdAt: now,
+          type: 'morning', // Always set to morning type
           autoReset: true,
           nextResetTime: nextResetTime
         }
 
-        // Save new session
+        console.log('Creating new morning session with data:', {
+          date: newSessionData.date,
+          startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
+          endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
+          nextResetTime: new Date(nextResetTime).toString()
+        })
+
+        // First archive the old session
+        const archiveRef = dbRef(db, `archived-sessions/${oldSessionId}`)
+        await set(archiveRef, {
+          ...currentSession,
+          archivedAt: now
+        })
+        console.log('Old session archived successfully')
+
+        // Then save new session
         const sessionRef = dbRef(db, `attendance-sessions/${newSessionId}`)
         await set(sessionRef, newSessionData)
+        console.log('New session created successfully')
 
-        // Update active session
+        // Finally update active session
         const activeSessionRef = dbRef(db, 'active-session')
         await set(activeSessionRef, {
           ...newSessionData,
           sessionId: newSessionId
         })
+        console.log('Active session updated successfully')
 
-        // Archive the old session
-        const archiveRef = dbRef(db, `archived-sessions/${oldSessionId}`)
-        await set(archiveRef, {
-          ...currentSession,
-          archivedAt: Date.now()
-        })
-
-        console.log('QR code auto-reset complete')
+        console.log('QR code auto-reset complete with new morning session')
+        return true // Return true to indicate successful reset
       } catch (error) {
         console.error('Error during auto-reset:', error)
+        return false // Return false to indicate failed reset
       }
     },
 
     calculateSessionStartTime(sessionType, dateString) {
       const selectedDate = new Date(dateString)
 
-      switch (sessionType) {
-        case 'morning': {
-          // 7:30 AM
-          const morningStart = new Date(selectedDate)
-          morningStart.setHours(7, 30, 0, 0)
-          return morningStart.getTime()
-        }
-
-        case 'custom': {
-          // Use the original session's start time but with today's date
-          if (this.activeSession && this.activeSession.startTime) {
-            const originalStartDate = new Date(this.activeSession.startTime)
-            const customStart = new Date(selectedDate)
-            customStart.setHours(originalStartDate.getHours(), originalStartDate.getMinutes(), 0, 0)
-            return customStart.getTime()
-          }
-          // Default to 7:30 AM if no active session
-          const defaultStart = new Date(selectedDate)
-          defaultStart.setHours(7, 30, 0, 0)
-          return defaultStart.getTime()
-        }
-
-        default: {
-          // Default to 7:30 AM
-          const defaultStartTime = new Date(selectedDate)
-          defaultStartTime.setHours(7, 30, 0, 0)
-          return defaultStartTime.getTime()
-        }
+      if (sessionType === 'morning') {
+        // 7:30 AM
+        selectedDate.setHours(7, 30, 0, 0)
+        return selectedDate.getTime()
+      } else if (sessionType === 'custom') {
+        // Use the custom time settings
+        const [startHour, startMinute] = this.startTime.split(':').map(Number)
+        selectedDate.setHours(startHour, startMinute, 0, 0)
+        return selectedDate.getTime()
+      } else {
+        // Default to 7:30 AM
+        selectedDate.setHours(7, 30, 0, 0)
+        return selectedDate.getTime()
       }
     },
 
     calculateSessionEndTime(sessionType, dateString) {
       const selectedDate = new Date(dateString)
 
-      switch (sessionType) {
-        case 'morning': {
-          // 4:30 PM
-          const eveningEnd = new Date(selectedDate)
-          eveningEnd.setHours(16, 30, 0, 0)
-          return eveningEnd.getTime()
-        }
-
-        case 'custom': {
-          // Use the original session's end time but with today's date
-          if (this.activeSession && this.activeSession.endTime) {
-            const originalEndDate = new Date(this.activeSession.endTime)
-            const customEnd = new Date(selectedDate)
-            customEnd.setHours(originalEndDate.getHours(), originalEndDate.getMinutes(), 0, 0)
-            return customEnd.getTime()
-          }
-          // Default to 4:30 PM if no active session
-          const defaultEnd = new Date(selectedDate)
-          defaultEnd.setHours(16, 30, 0, 0)
-          return defaultEnd.getTime()
-        }
-
-        default: {
-          // Default to 4:30 PM
-          const defaultEndTime = new Date(selectedDate)
-          defaultEndTime.setHours(16, 30, 0, 0)
-          return defaultEndTime.getTime()
-        }
+      if (sessionType === 'morning') {
+        // 4:30 PM
+        selectedDate.setHours(16, 30, 0, 0)
+        return selectedDate.getTime()
+      } else if (sessionType === 'custom') {
+        // Use the custom time settings
+        const [endHour, endMinute] = this.endTime.split(':').map(Number)
+        selectedDate.setHours(endHour, endMinute, 0, 0)
+        return selectedDate.getTime()
+      } else {
+        // Default to 4:30 PM
+        selectedDate.setHours(16, 30, 0, 0)
+        return selectedDate.getTime()
       }
     },
 
@@ -407,18 +400,35 @@ export default {
       // Clear any existing timer
       if (this.resetTimer) {
         clearInterval(this.resetTimer)
+        this.resetTimer = null
       }
+
+      // Validate nextResetTime
+      if (!nextResetTime || isNaN(nextResetTime)) {
+        console.error('Invalid nextResetTime:', nextResetTime)
+        return
+      }
+
+      // Log the next reset time for debugging
+      console.log('Setting up auto reset for:', new Date(nextResetTime).toString())
 
       // Calculate time until next reset
       const updateCountdown = () => {
-        const now = Date.now()
-        this.timeUntilReset = Math.max(0, nextResetTime - now)
+        const currentTime = Date.now()
+        this.timeUntilReset = Math.max(0, nextResetTime - currentTime)
 
         // If time is up, reset the QR code
         if (this.timeUntilReset <= 0 && this.activeSession) {
+          console.log('Reset time reached, performing auto reset')
+
+          // Stop the timer immediately to prevent multiple calls
+          if (this.resetTimer) {
+            clearInterval(this.resetTimer)
+            this.resetTimer = null
+          }
+
+          // Perform the reset
           this.performAutoReset(this.activeSession)
-          clearInterval(this.resetTimer)
-          this.resetTimer = null
         }
       }
 
@@ -446,19 +456,23 @@ export default {
     calculateNextResetTime(settings) {
       // Get the reset time and hours from settings
       const resetTimeStr = settings.resetTime || '07:30'
-      const resetHours = settings.resetHours || 16 // Default to 16 hours if not set
       const [hours, minutes] = resetTimeStr.split(':').map(Number)
+
+      console.log(`Calculating next reset time with settings: resetTime=${resetTimeStr}`)
 
       // Get current date
       const now = new Date()
+      console.log(`Current time: ${now.toString()}`)
 
       // Set target time to today at the specified reset time
       const targetDate = new Date(now)
       targetDate.setHours(hours, minutes, 0, 0)
+      console.log(`Initial target date: ${targetDate.toString()}`)
 
-      // If that time has already passed today, add the specified reset hours
+      // If that time has already passed today, set to tomorrow at the same time
       if (targetDate <= now) {
-        targetDate.setTime(targetDate.getTime() + resetHours * 60 * 60 * 1000)
+        targetDate.setDate(targetDate.getDate() + 1)
+        console.log(`Time already passed today, adjusted to tomorrow: ${targetDate.toString()}`)
       }
 
       // If the target date falls on a weekend, skip to Monday
@@ -467,13 +481,15 @@ export default {
         // Sunday
         targetDate.setDate(targetDate.getDate() + 1) // Skip to Monday
         targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
+        console.log(`Target falls on Sunday, adjusted to Monday: ${targetDate.toString()}`)
       } else if (day === 6) {
         // Saturday
         targetDate.setDate(targetDate.getDate() + 2) // Skip to Monday
         targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
+        console.log(`Target falls on Saturday, adjusted to Monday: ${targetDate.toString()}`)
       }
 
-      console.log('Next reset time calculated:', targetDate.toString())
+      console.log('Final next reset time calculated:', targetDate.toString())
       return targetDate.getTime()
     },
 
@@ -583,13 +599,23 @@ export default {
         // Calculate next reset time based on settings
         const nextResetTime = this.calculateNextResetTime(resetSettings)
 
+        // Ask if user wants to create a morning session or keep the current type
+        const createMorningSession = confirm(
+          'Do you want to create a new morning session?\n\n' +
+            'Click "OK" to create a morning session.\n' +
+            'Click "Cancel" to keep the current session type.'
+        )
+
+        // Determine session type based on user choice
+        const sessionType = createMorningSession ? 'morning' : this.activeSession.type
+
         // Create new session data with today's date
         const sessionData = {
           date: today, // Use today's date for the new session
-          startTime: this.calculateSessionStartTime(this.activeSession.type, today),
-          endTime: this.calculateSessionEndTime(this.activeSession.type, today),
+          startTime: this.calculateSessionStartTime(sessionType, today),
+          endTime: this.calculateSessionEndTime(sessionType, today),
           createdAt: Date.now(),
-          type: this.activeSession.type,
+          type: sessionType, // Use the determined session type
           autoReset: this.activeSession.autoReset,
           nextResetTime: this.activeSession.autoReset ? nextResetTime : null
         }
@@ -614,6 +640,80 @@ export default {
       } catch (error) {
         console.error('Error refreshing QR code:', error)
         alert('Failed to refresh QR code: ' + error.message)
+      }
+    },
+
+    async isResetTimeFromSettings(resetTime) {
+      try {
+        // Get auto-reset settings
+        const settingsRef = dbRef(db, 'settings/autoReset')
+        const settingsSnapshot = await get(settingsRef)
+
+        if (settingsSnapshot.exists()) {
+          const settings = settingsSnapshot.val()
+          const settingsResetTime = settings.resetTime
+
+          if (settingsResetTime) {
+            // Convert both times to minutes since midnight for comparison
+            const [settingsHours, settingsMinutes] = settingsResetTime.split(':').map(Number)
+            const settingsTimeInMinutes = settingsHours * 60 + settingsMinutes
+
+            // Get the reset time as a Date object
+            const resetTimeDate = new Date(resetTime)
+            const resetTimeInMinutes = resetTimeDate.getHours() * 60 + resetTimeDate.getMinutes()
+
+            // Allow a 5-minute margin for comparison
+            return Math.abs(resetTimeInMinutes - settingsTimeInMinutes) <= 5
+          }
+        }
+
+        return false
+      } catch (error) {
+        console.error('Error checking reset time:', error)
+        return false
+      }
+    },
+
+    async manualReset() {
+      if (!this.activeSession) {
+        alert('No active session to reset')
+        return
+      }
+
+      if (
+        confirm(
+          'Are you sure you want to manually reset the session?\n\nThis will end the current session and create a new morning session.'
+        )
+      ) {
+        console.log('Manual reset triggered')
+
+        try {
+          // Disable the button during reset
+          const resetButton = document.querySelector('.manual-reset-btn')
+          if (resetButton) {
+            resetButton.disabled = true
+            resetButton.textContent = 'Resetting...'
+          }
+
+          // Perform the reset directly
+          const success = await this.performAutoReset(this.activeSession)
+
+          if (success) {
+            alert('Session reset successful. A new morning session has been created.')
+          } else {
+            alert('Session reset failed. Please check the console for details.')
+          }
+        } catch (error) {
+          console.error('Manual reset error:', error)
+          alert('An error occurred during reset: ' + error.message)
+        } finally {
+          // Re-enable the button
+          const resetButton = document.querySelector('.manual-reset-btn')
+          if (resetButton) {
+            resetButton.disabled = false
+            resetButton.textContent = 'Manual Reset'
+          }
+        }
       }
     },
 
@@ -725,9 +825,13 @@ export default {
     },
 
     isWeekend(date) {
-      const day = new Date(date).getDay()
+      const dayOfWeek = new Date(date).getDay()
       // 0 is Sunday, 6 is Saturday
-      return day === 0 || day === 6
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
+      if (isWeekend) {
+        console.log(`Date ${date} is a weekend (day ${dayOfWeek})`)
+      }
+      return isWeekend
     },
 
     formatDate(dateString) {
@@ -979,5 +1083,19 @@ input[type='checkbox'] {
   font-weight: bold;
   color: #ff9800;
   margin: 10px 0;
+}
+
+.manual-reset-btn {
+  background-color: #9c27b0;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.manual-reset-btn:disabled {
+  background-color: #d1c4e9;
+  cursor: not-allowed;
 }
 </style>
