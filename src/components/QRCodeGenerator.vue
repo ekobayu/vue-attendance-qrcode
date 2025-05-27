@@ -265,8 +265,9 @@ export default {
         const oldSessionId = currentSession.sessionId
         const now = Date.now()
 
-        // Get today's date in YYYY-MM-DD format
+        // Get today's date in YYYY-MM-DD format - ALWAYS use current date
         const today = new Date().toISOString().split('T')[0]
+        console.log(`Using current date for new session: ${today}`)
 
         // Check if today is a weekend
         if (this.isWeekend(today)) {
@@ -313,7 +314,7 @@ export default {
 
         // Create new session data with today's date - always morning session
         const newSessionData = {
-          date: today,
+          date: today, // ALWAYS use current date
           startTime: this.calculateSessionStartTime('morning', today),
           endTime: this.calculateSessionEndTime('morning', today),
           createdAt: now,
@@ -497,8 +498,12 @@ export default {
       this.loading = true
 
       try {
+        // Always use current date
+        const today = new Date().toISOString().split('T')[0]
+        console.log(`Using current date for new session: ${today}`)
+
         // Calculate start and end times based on session type
-        const selectedDate = new Date(this.sessionDate)
+        const selectedDate = new Date(today) // Use today instead of this.sessionDate
         let startDateTime, endDateTime
 
         if (this.sessionType === 'morning') {
@@ -523,22 +528,25 @@ export default {
         // Create a unique session ID
         this.sessionId = 'session-' + Date.now().toString()
 
-        // Get auto-reset settings
-        const settingsRef = dbRef(db, 'settings/autoReset')
-        const settingsSnapshot = await get(settingsRef)
-        const resetSettings = settingsSnapshot.exists()
-          ? settingsSnapshot.val()
-          : {
-              resetTime: '07:30',
-              resetHours: 16
-            }
+        // Calculate next reset time - always set to tomorrow at 7:30 AM
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(7, 30, 0, 0)
 
-        // Calculate next reset time based on settings
-        const nextResetTime = this.calculateNextResetTime(resetSettings)
+        // If tomorrow is a weekend, adjust to Monday
+        if (tomorrow.getDay() === 0) {
+          // Sunday
+          tomorrow.setDate(tomorrow.getDate() + 1) // Skip to Monday
+        } else if (tomorrow.getDay() === 6) {
+          // Saturday
+          tomorrow.setDate(tomorrow.getDate() + 2) // Skip to Monday
+        }
+
+        const nextResetTime = tomorrow.getTime()
 
         // Create attendance session in Firebase
         const sessionData = {
-          date: this.sessionDate,
+          date: today, // Use today instead of this.sessionDate
           startTime: startDateTime.getTime(),
           endTime: endDateTime.getTime(),
           createdAt: Date.now(),
@@ -546,6 +554,13 @@ export default {
           autoReset: this.autoReset,
           nextResetTime: this.autoReset ? nextResetTime : null
         }
+
+        console.log('Creating new session with data:', {
+          date: sessionData.date,
+          type: this.sessionType,
+          startTime: new Date(sessionData.startTime).toLocaleTimeString(),
+          endTime: new Date(sessionData.endTime).toLocaleTimeString()
+        })
 
         // Save session data
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
@@ -575,8 +590,9 @@ export default {
         const oldSessionId = this.sessionId
         this.sessionId = 'session-' + Date.now().toString()
 
-        // Get today's date in YYYY-MM-DD format
+        // Get today's date in YYYY-MM-DD format - ALWAYS use current date
         const today = new Date().toISOString().split('T')[0]
+        console.log(`Using current date for refreshed session: ${today}`)
 
         // Check if today is a weekend
         if (this.isWeekend(today)) {
@@ -588,16 +604,29 @@ export default {
 
         // Get auto-reset settings
         const settingsRef = dbRef(db, 'settings/autoReset')
-        const settingsSnapshot = await get(settingsRef)
-        const resetSettings = settingsSnapshot.exists()
-          ? settingsSnapshot.val()
+        const settingsSnapshot = (await get(settingsRef))
+          ? // const resetSettings = settingsSnapshot.exists()
+            settingsSnapshot.val()
           : {
               resetTime: '07:30',
               resetHours: 16
             }
 
-        // Calculate next reset time based on settings
-        const nextResetTime = this.calculateNextResetTime(resetSettings)
+        // Calculate next reset time - always set to tomorrow at 7:30 AM
+        const tomorrow = new Date()
+        tomorrow.setDate(tomorrow.getDate() + 1)
+        tomorrow.setHours(7, 30, 0, 0)
+
+        // If tomorrow is a weekend, adjust to Monday
+        if (tomorrow.getDay() === 0) {
+          // Sunday
+          tomorrow.setDate(tomorrow.getDate() + 1) // Skip to Monday
+        } else if (tomorrow.getDay() === 6) {
+          // Saturday
+          tomorrow.setDate(tomorrow.getDate() + 2) // Skip to Monday
+        }
+
+        const nextResetTime = tomorrow.getTime()
 
         // Ask if user wants to create a morning session or keep the current type
         const createMorningSession = confirm(
@@ -611,7 +640,7 @@ export default {
 
         // Create new session data with today's date
         const sessionData = {
-          date: today, // Use today's date for the new session
+          date: today, // ALWAYS use current date
           startTime: this.calculateSessionStartTime(sessionType, today),
           endTime: this.calculateSessionEndTime(sessionType, today),
           createdAt: Date.now(),
@@ -619,6 +648,13 @@ export default {
           autoReset: this.activeSession.autoReset,
           nextResetTime: this.activeSession.autoReset ? nextResetTime : null
         }
+
+        console.log('Creating refreshed session with data:', {
+          date: sessionData.date,
+          type: sessionType,
+          startTime: new Date(sessionData.startTime).toLocaleTimeString(),
+          endTime: new Date(sessionData.endTime).toLocaleTimeString()
+        })
 
         // Save new session
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
@@ -637,6 +673,8 @@ export default {
           ...this.activeSession,
           archivedAt: Date.now()
         })
+
+        alert('Session refreshed successfully with current date.')
       } catch (error) {
         console.error('Error refreshing QR code:', error)
         alert('Failed to refresh QR code: ' + error.message)
@@ -680,11 +718,18 @@ export default {
         return
       }
 
-      if (
-        confirm(
-          'Are you sure you want to manually reset the session?\n\nThis will end the current session and create a new morning session.'
-        )
-      ) {
+      const today = new Date().toISOString().split('T')[0]
+      const currentSessionDate = this.activeSession.date
+
+      let confirmMessage = 'Are you sure you want to reset the session?\n\n'
+
+      if (currentSessionDate !== today) {
+        confirmMessage += `This will update the session date from ${currentSessionDate} to today (${today}).\n\n`
+      }
+
+      confirmMessage += 'A new morning session will be created and the current session will be archived.'
+
+      if (confirm(confirmMessage)) {
         console.log('Manual reset triggered')
 
         try {
@@ -699,7 +744,7 @@ export default {
           const success = await this.performAutoReset(this.activeSession)
 
           if (success) {
-            alert('Session reset successful. A new morning session has been created.')
+            alert(`Session reset successful. A new morning session has been created for today (${today}).`)
           } else {
             alert('Session reset failed. Please check the console for details.')
           }
@@ -711,7 +756,7 @@ export default {
           const resetButton = document.querySelector('.manual-reset-btn')
           if (resetButton) {
             resetButton.disabled = false
-            resetButton.textContent = 'Manual Reset'
+            resetButton.textContent = 'Reset to Morning Session'
           }
         }
       }
