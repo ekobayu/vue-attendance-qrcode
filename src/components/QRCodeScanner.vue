@@ -1,9 +1,6 @@
 <template>
   <div class="qr-scanner">
-    <!-- <h2>Scan Attendance QR Code</h2> -->
-
     <div v-if="!scanning && !attendanceMarked">
-      <!-- <p class="instructions">Scan the attendance QR code displayed in office to mark your attendance.</p> -->
       <button @click="startScanning" class="scan-btn">Start Scanner</button>
     </div>
 
@@ -194,7 +191,7 @@ export default {
 
           // Check if auto-reset is enabled and if it's time to reset
           if (activeSession.autoReset && activeSession.nextResetTime && Date.now() >= activeSession.nextResetTime) {
-            console.log('Auto-reset time reached during scan, notifying admin...')
+            // console.log('Auto-reset time reached during scan, notifying admin...')
 
             // We don't perform the reset here, just notify that it's needed
             // This prevents race conditions if multiple users scan at the same time

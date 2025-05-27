@@ -86,7 +86,7 @@ export default {
 
           // Check if the reset flag is recent (within last hour)
           if (Date.now() - resetData.timestamp < 60 * 60 * 1000) {
-            console.log('Reset needed flag found, checking active session...')
+            // console.log('Reset needed flag found, checking active session...')
 
             // Get active session
             const activeSessionRef = dbRef(db, 'active-session')
@@ -97,7 +97,7 @@ export default {
 
               // Check if it's time to reset
               if (activeSession.autoReset && activeSession.nextResetTime && Date.now() >= activeSession.nextResetTime) {
-                console.log('Performing needed auto-reset...')
+                // console.log('Performing needed auto-reset...')
                 await this.performAutoReset(activeSession)
               }
             }
@@ -152,7 +152,7 @@ export default {
           archivedAt: Date.now()
         })
 
-        console.log('QR code auto-reset complete')
+        // console.log('QR code auto-reset complete')
       } catch (error) {
         console.error('Error during auto-reset:', error)
       }

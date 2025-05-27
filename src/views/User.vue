@@ -518,10 +518,8 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        // Changed from 'morning' to 'office'
         return 'Office (07:30 AM - 04:30 PM)'
       } else if (type === 'morning') {
-        // For backward compatibility
         return 'Morning (07:30 AM - 04:30 PM)'
       } else if (type === 'custom') {
         return 'Custom Session'

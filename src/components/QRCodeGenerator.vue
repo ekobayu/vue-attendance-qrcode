@@ -280,7 +280,7 @@ export default {
           nextMonday.setDate(nextMonday.getDate() + daysUntilMonday)
           nextMonday.setHours(7, 30, 0, 0) // Set to 7:30 AM on Monday
 
-          console.log('Next reset scheduled for Monday:', nextMonday.toString())
+          // console.log('Next reset scheduled for Monday:', nextMonday.toString())
 
           // Update active session with new reset time
           const activeSessionRef = dbRef(db, 'active-session')
@@ -310,7 +310,7 @@ export default {
         }
 
         const nextResetTime = tomorrow.getTime()
-        console.log('Next reset time set to:', tomorrow.toString())
+        // console.log('Next reset time set to:', tomorrow.toString())
 
         // Create new session data with today's date - always office session
         const newSessionData = {
@@ -323,13 +323,13 @@ export default {
           nextResetTime: nextResetTime
         }
 
-        console.log('Creating new office session with data:', {
-          // Updated log message
-          date: newSessionData.date,
-          startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
-          endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
-          nextResetTime: new Date(nextResetTime).toString()
-        })
+        // console.log('Creating new office session with data:', {
+        //   // Updated log message
+        //   date: newSessionData.date,
+        //   startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
+        //   endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
+        //   nextResetTime: new Date(nextResetTime).toString()
+        // })
 
         // First archive the old session
         const archiveRef = dbRef(db, `archived-sessions/${oldSessionId}`)
@@ -337,12 +337,12 @@ export default {
           ...currentSession,
           archivedAt: now
         })
-        console.log('Old session archived successfully')
+        // console.log('Old session archived successfully')
 
         // Then save new session
         const sessionRef = dbRef(db, `attendance-sessions/${newSessionId}`)
         await set(sessionRef, newSessionData)
-        console.log('New session created successfully')
+        // console.log('New session created successfully')
 
         // Finally update active session
         const activeSessionRef = dbRef(db, 'active-session')
@@ -350,9 +350,9 @@ export default {
           ...newSessionData,
           sessionId: newSessionId
         })
-        console.log('Active session updated successfully')
+        // console.log('Active session updated successfully')
 
-        console.log('QR code auto-reset complete with new morning session')
+        // console.log('QR code auto-reset complete with new morning session')
         return true // Return true to indicate successful reset
       } catch (error) {
         console.error('Error during auto-reset:', error)
@@ -414,7 +414,7 @@ export default {
       }
 
       // Log the next reset time for debugging
-      console.log('Setting up auto reset for:', new Date(nextResetTime).toString())
+      // console.log('Setting up auto reset for:', new Date(nextResetTime).toString())
 
       // Calculate time until next reset
       const updateCountdown = () => {
@@ -423,7 +423,7 @@ export default {
 
         // If time is up, reset the QR code
         if (this.timeUntilReset <= 0 && this.activeSession) {
-          console.log('Reset time reached, performing auto reset')
+          // console.log('Reset time reached, performing auto reset')
 
           // Stop the timer immediately to prevent multiple calls
           if (this.resetTimer) {
@@ -462,21 +462,21 @@ export default {
       const resetTimeStr = settings.resetTime || '07:30'
       const [hours, minutes] = resetTimeStr.split(':').map(Number)
 
-      console.log(`Calculating next reset time with settings: resetTime=${resetTimeStr}`)
+      // console.log(`Calculating next reset time with settings: resetTime=${resetTimeStr}`)
 
       // Get current date
       const now = new Date()
-      console.log(`Current time: ${now.toString()}`)
+      // console.log(`Current time: ${now.toString()}`)
 
       // Set target time to today at the specified reset time
       const targetDate = new Date(now)
       targetDate.setHours(hours, minutes, 0, 0)
-      console.log(`Initial target date: ${targetDate.toString()}`)
+      // console.log(`Initial target date: ${targetDate.toString()}`)
 
       // If that time has already passed today, set to tomorrow at the same time
       if (targetDate <= now) {
         targetDate.setDate(targetDate.getDate() + 1)
-        console.log(`Time already passed today, adjusted to tomorrow: ${targetDate.toString()}`)
+        // console.log(`Time already passed today, adjusted to tomorrow: ${targetDate.toString()}`)
       }
 
       // If the target date falls on a weekend, skip to Monday
@@ -485,15 +485,15 @@ export default {
         // Sunday
         targetDate.setDate(targetDate.getDate() + 1) // Skip to Monday
         targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
-        console.log(`Target falls on Sunday, adjusted to Monday: ${targetDate.toString()}`)
+        // console.log(`Target falls on Sunday, adjusted to Monday: ${targetDate.toString()}`)
       } else if (day === 6) {
         // Saturday
         targetDate.setDate(targetDate.getDate() + 2) // Skip to Monday
         targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
-        console.log(`Target falls on Saturday, adjusted to Monday: ${targetDate.toString()}`)
+        // console.log(`Target falls on Saturday, adjusted to Monday: ${targetDate.toString()}`)
       }
 
-      console.log('Final next reset time calculated:', targetDate.toString())
+      // console.log('Final next reset time calculated:', targetDate.toString())
       return targetDate.getTime()
     },
 
@@ -503,7 +503,7 @@ export default {
       try {
         // Always use current date
         const today = new Date().toISOString().split('T')[0]
-        console.log(`Using current date for new session: ${today}`)
+        // console.log(`Using current date for new session: ${today}`)
 
         // Calculate start and end times based on session type
         const selectedDate = new Date(today) // Use today instead of this.sessionDate
@@ -559,12 +559,12 @@ export default {
           nextResetTime: this.autoReset ? nextResetTime : null
         }
 
-        console.log('Creating new session with data:', {
-          date: sessionData.date,
-          type: this.sessionType,
-          startTime: new Date(sessionData.startTime).toLocaleTimeString(),
-          endTime: new Date(sessionData.endTime).toLocaleTimeString()
-        })
+        // console.log('Creating new session with data:', {
+        //   date: sessionData.date,
+        //   type: this.sessionType,
+        //   startTime: new Date(sessionData.startTime).toLocaleTimeString(),
+        //   endTime: new Date(sessionData.endTime).toLocaleTimeString()
+        // })
 
         // Save session data
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
@@ -596,7 +596,7 @@ export default {
 
         // Get today's date in YYYY-MM-DD format - ALWAYS use current date
         const today = new Date().toISOString().split('T')[0]
-        console.log(`Using current date for refreshed session: ${today}`)
+        // console.log(`Using current date for refreshed session: ${today}`)
 
         // Check if today is a weekend
         if (this.isWeekend(today)) {
@@ -653,12 +653,12 @@ export default {
           nextResetTime: this.activeSession.autoReset ? nextResetTime : null
         }
 
-        console.log('Creating refreshed session with data:', {
-          date: sessionData.date,
-          type: sessionType,
-          startTime: new Date(sessionData.startTime).toLocaleTimeString(),
-          endTime: new Date(sessionData.endTime).toLocaleTimeString()
-        })
+        // console.log('Creating refreshed session with data:', {
+        //   date: sessionData.date,
+        //   type: sessionType,
+        //   startTime: new Date(sessionData.startTime).toLocaleTimeString(),
+        //   endTime: new Date(sessionData.endTime).toLocaleTimeString()
+        // })
 
         // Save new session
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
@@ -734,8 +734,6 @@ export default {
       confirmMessage += 'A new morning session will be created and the current session will be archived.'
 
       if (confirm(confirmMessage)) {
-        console.log('Manual reset triggered')
-
         try {
           // Disable the button during reset
           const resetButton = document.querySelector('.manual-reset-btn')
