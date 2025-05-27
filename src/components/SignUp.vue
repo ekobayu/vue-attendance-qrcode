@@ -545,6 +545,7 @@ label {
 input[type='text'],
 input[type='email'],
 input[type='password'] {
+  width: 93%;
   padding: 12px;
   border: 1px solid #ddd;
   border-radius: 4px;

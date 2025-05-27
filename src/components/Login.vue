@@ -198,7 +198,7 @@ label {
 input[type='email'],
 input[type='password'],
 input[type='text'] {
-  width: 100%;
+  width: 93%;
   padding: 12px;
   border: 1px solid #ddd;
   border-radius: 4px;
