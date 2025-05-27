@@ -133,8 +133,8 @@ export default {
         this.markDate = sessionData.date
 
         // Set session type
-        if (sessionData.type === 'morning') {
-          this.sessionType = 'Morning (07.30 AM - 04.30 PM)'
+        if (sessionData.type === 'office') {
+          this.sessionType = 'Office (07.30 AM - 04.30 PM)'
         } else {
           this.sessionType = 'Custom Session'
         }

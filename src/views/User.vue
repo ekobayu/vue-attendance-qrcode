@@ -517,16 +517,16 @@ export default {
     },
 
     getSessionTypeDisplay(type) {
-      if (type === 'morning') {
-        return 'Morning'
-      } else if (type === 'day') {
-        return 'Day Session'
-      } else if (type === 'full-day') {
-        return 'Full Day'
+      if (type === 'office') {
+        // Changed from 'morning' to 'office'
+        return 'Office (07:30 AM - 04:30 PM)'
+      } else if (type === 'morning') {
+        // For backward compatibility
+        return 'Morning (07:30 AM - 04:30 PM)'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
-      return type || ''
+      return type || 'Unknown'
     }
   }
 }

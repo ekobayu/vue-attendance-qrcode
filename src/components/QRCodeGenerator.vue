@@ -6,7 +6,7 @@
       <div class="form-group">
         <label for="session-type">Session Type:</label>
         <select id="session-type" v-model="sessionType">
-          <option value="morning">Morning (07.30 AM - 04.30 PM)</option>
+          <option value="office">Office (07:30 AM - 04:30 PM)</option>
           <option value="custom">Custom Session</option>
         </select>
       </div>
@@ -103,7 +103,7 @@ export default {
   },
   data() {
     return {
-      sessionType: 'morning',
+      sessionType: 'office',
       startTime: '07:30',
       endTime: '16:30',
       sessionDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
@@ -312,18 +312,19 @@ export default {
         const nextResetTime = tomorrow.getTime()
         console.log('Next reset time set to:', tomorrow.toString())
 
-        // Create new session data with today's date - always morning session
+        // Create new session data with today's date - always office session
         const newSessionData = {
           date: today, // ALWAYS use current date
-          startTime: this.calculateSessionStartTime('morning', today),
-          endTime: this.calculateSessionEndTime('morning', today),
+          startTime: this.calculateSessionStartTime('office', today), // Changed from 'morning' to 'office'
+          endTime: this.calculateSessionEndTime('office', today), // Changed from 'morning' to 'office'
           createdAt: now,
-          type: 'morning', // Always set to morning type
+          type: 'office', // Changed from 'morning' to 'office'
           autoReset: true,
           nextResetTime: nextResetTime
         }
 
-        console.log('Creating new morning session with data:', {
+        console.log('Creating new office session with data:', {
+          // Updated log message
           date: newSessionData.date,
           startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
           endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
@@ -362,7 +363,8 @@ export default {
     calculateSessionStartTime(sessionType, dateString) {
       const selectedDate = new Date(dateString)
 
-      if (sessionType === 'morning') {
+      if (sessionType === 'office') {
+        // Changed from 'morning' to 'office'
         // 7:30 AM
         selectedDate.setHours(7, 30, 0, 0)
         return selectedDate.getTime()
@@ -381,7 +383,8 @@ export default {
     calculateSessionEndTime(sessionType, dateString) {
       const selectedDate = new Date(dateString)
 
-      if (sessionType === 'morning') {
+      if (sessionType === 'office') {
+        // Changed from 'morning' to 'office'
         // 4:30 PM
         selectedDate.setHours(16, 30, 0, 0)
         return selectedDate.getTime()
@@ -506,7 +509,8 @@ export default {
         const selectedDate = new Date(today) // Use today instead of this.sessionDate
         let startDateTime, endDateTime
 
-        if (this.sessionType === 'morning') {
+        if (this.sessionType === 'office') {
+          // Changed from 'morning' to 'office'
           // 7:30 AM - 4:30 PM (9 hours)
           startDateTime = new Date(selectedDate)
           startDateTime.setHours(7, 30, 0, 0)
@@ -628,15 +632,15 @@ export default {
 
         const nextResetTime = tomorrow.getTime()
 
-        // Ask if user wants to create a morning session or keep the current type
-        const createMorningSession = confirm(
-          'Do you want to create a new morning session?\n\n' +
-            'Click "OK" to create a morning session.\n' +
+        // Ask if user wants to create an office session or keep the current type
+        const createOfficeSession = confirm(
+          'Do you want to create a new office session?\n\n' +
+            'Click "OK" to create an office session.\n' +
             'Click "Cancel" to keep the current session type.'
         )
 
         // Determine session type based on user choice
-        const sessionType = createMorningSession ? 'morning' : this.activeSession.type
+        const sessionType = createOfficeSession ? 'office' : this.activeSession.type // Changed from 'morning' to 'office'
 
         // Create new session data with today's date
         const sessionData = {
@@ -855,16 +859,14 @@ export default {
     },
 
     getSessionTypeDisplay(type) {
-      if (type === 'morning') {
+      if (type === 'office') {
+        // Changed from 'morning' to 'office'
+        return 'Office (07:30 AM - 04:30 PM)'
+      } else if (type === 'morning') {
+        // For backward compatibility
         return 'Morning (07:30 AM - 04:30 PM)'
       } else if (type === 'custom') {
         return 'Custom Session'
-      } else if (type === 'day') {
-        // For backward compatibility
-        return 'Day Session (8 AM - 5 PM)'
-      } else if (type === 'full-day') {
-        // For backward compatibility
-        return 'Full Day Session'
       }
       return type || 'Unknown'
     },
