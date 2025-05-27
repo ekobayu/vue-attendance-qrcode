@@ -5,6 +5,7 @@ import User from '../views/User.vue'
 import RemoteAttendance from '../views/RemoteAttendance.vue'
 import SignUp from '../components/SignUp.vue'
 import UserManagement from '../components/UserManagement.vue'
+import QRDisplay from '../components/QRDisplay.vue'
 import { auth } from '../firebase/config'
 
 const routes = [
@@ -41,6 +42,14 @@ const routes = [
     name: 'UserManagement',
     component: UserManagement,
     meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/qr-display',
+    name: 'QRDisplay',
+    component: QRDisplay,
+    meta: {
+      hideNavigation: true
+    }
   }
 ]
 

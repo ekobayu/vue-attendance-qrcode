@@ -67,6 +67,7 @@
 
         <div class="action-buttons">
           <button @click="printQRCode" class="print-btn">Print QR Code</button>
+          <button @click="openInNewTab" class="new-tab-btn">Open in New Tab</button>
           <button @click="refreshQRCode" class="refresh-btn">Refresh QR Code</button>
           <!-- <button @click="manualReset" class="manual-reset-btn">Manual Reset</button> -->
           <button @click="endSession" class="end-btn">End Session</button>
@@ -148,6 +149,13 @@ export default {
     }
   },
   methods: {
+    openInNewTab() {
+      if (!this.activeSession) return
+
+      // Open the QR display page in a new tab - no session ID needed in URL
+      const url = `${window.location.origin}/qr-display`
+      window.open(url, '_blank')
+    },
     async checkActiveSessionAndReset() {
       try {
         console.log('Checking for active session and reset conditions...')
@@ -1108,6 +1116,35 @@ input[type='checkbox'] {
   color: #4caf50;
   font-weight: bold;
   margin-top: 5px;
+}
+
+.new-tab-btn {
+  background-color: #009688;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.new-tab-btn:hover {
+  background-color: #00796b;
+}
+
+/* Adjust the action buttons to ensure they fit nicely */
+.action-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .action-buttons button {
+    flex: 1 0 calc(50% - 10px);
+    margin-bottom: 10px;
+  }
 }
 
 .next-reset {

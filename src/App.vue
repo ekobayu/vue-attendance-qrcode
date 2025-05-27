@@ -1,12 +1,17 @@
 <template>
   <div id="app">
-    <nav v-if="user">
-      <router-link to="/">Home</router-link> |
-      <router-link to="/user">Mark Attendance</router-link>
-      <router-link v-if="isAdmin" to="/admin">| Admin Panel</router-link>
-      <button @click="logout" class="logout-btn">Logout</button>
-    </nav>
+    <header v-if="!$route.meta.hideNavigation">
+      <nav v-if="user">
+        <router-link to="/">Home</router-link> |
+        <router-link to="/user">Mark Attendance</router-link>
+        <router-link v-if="isAdmin" to="/admin">| Admin Panel</router-link>
+        <button @click="logout" class="logout-btn">Logout</button>
+      </nav>
+    </header>
     <router-view @login-success="handleLoginSuccess" />
+    <footer v-if="!$route.meta.hideNavigation">
+      <!-- Footer content -->
+    </footer>
   </div>
 </template>
 
