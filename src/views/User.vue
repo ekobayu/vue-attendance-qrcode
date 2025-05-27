@@ -87,6 +87,34 @@
           </div>
         </div>
 
+        <!-- Charts Section -->
+        <div class="charts-section" v-if="!loading && attendanceHistory.length > 1">
+          <h3>Attendance Analytics</h3>
+
+          <div class="chart-controls">
+            <button
+              v-for="chartType in chartTypes"
+              :key="chartType.value"
+              @click="activeChartType = chartType.value"
+              :class="['chart-btn', { active: activeChartType === chartType.value }]"
+            >
+              {{ chartType.label }}
+            </button>
+          </div>
+
+          <attendance-chart
+            :attendance-data="filteredHistory.length > 0 ? filteredHistory : attendanceHistory"
+            :chart-type="activeChartType"
+            :key="`chart-${activeChartType}-${filteredHistory.length}`"
+          />
+        </div>
+
+        <div class="charts-section" v-else-if="!loading && attendanceHistory.length === 1">
+          <div class="not-enough-data">
+            <p>You need at least two days of attendance data to view analytics.</p>
+          </div>
+        </div>
+
         <div class="attendance-stats">
           <div class="stat-card">
             <div class="stat-value">{{ filteredHistory.length }}</div>
@@ -99,6 +127,13 @@
           <div class="stat-card">
             <div class="stat-value">{{ remoteCount }}</div>
             <div class="stat-label">Remote</div>
+          </div>
+          <div class="stat-card" @click="activeChartType = 'streak'" v-if="attendanceHistory.length > 0">
+            <div class="stat-value">{{ currentStreak }}</div>
+            <div class="stat-label">
+              {{ hasMarkedAttendanceToday() ? 'Day Streak' : 'Previous Streak' }}
+              <span v-if="!hasMarkedAttendanceToday()" class="streak-note">Mark today to continue!</span>
+            </div>
           </div>
         </div>
 
@@ -147,11 +182,13 @@ import { auth, db } from '../firebase/config'
 import { onAuthStateChanged } from 'firebase/auth'
 import { ref as dbRef, get } from 'firebase/database'
 import QRCodeScanner from '../components/QRCodeScanner.vue'
+import AttendanceChart from '../components/AttendanceChart.vue'
 
 export default {
   name: 'UserPage',
   components: {
-    QRCodeScanner
+    QRCodeScanner,
+    AttendanceChart
   },
   data() {
     return {
@@ -167,7 +204,15 @@ export default {
       expandedMonths: {},
       remoteWorkSettings: null,
       remoteWorkLoaded: false,
-      weeklyLimitReached: false
+      weeklyLimitReached: false,
+      activeChartType: 'monthly',
+      chartTypes: [
+        { label: 'Monthly', value: 'monthly' },
+        { label: 'Weekly', value: 'weekly' },
+        { label: 'Distribution', value: 'distribution' },
+        { label: 'Streak', value: 'streak' }
+      ]
+      // currentStreak: 0
     }
   },
   computed: {
@@ -234,6 +279,53 @@ export default {
 
     remoteCount() {
       return this.filteredHistory.filter((record) => record.remote).length
+    },
+
+    currentStreak() {
+      if (!this.attendanceHistory.length) return 0
+
+      // Sort records by date in descending order (newest first)
+      const sortedRecords = [...this.attendanceHistory].sort((a, b) => new Date(b.date) - new Date(a.date))
+
+      // Get today's date without time
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      // Get yesterday's date
+      const yesterday = new Date(today)
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      // Check if the most recent record is from today or yesterday
+      const mostRecentDate = new Date(sortedRecords[0].date)
+      mostRecentDate.setHours(0, 0, 0, 0)
+
+      // If the most recent record is not from today or yesterday, no current streak
+      if (mostRecentDate.getTime() !== today.getTime() && mostRecentDate.getTime() !== yesterday.getTime()) {
+        return 0
+      }
+
+      // Start counting streak
+      let streak = 1
+      let expectedDate = new Date(mostRecentDate)
+
+      // If most recent is yesterday, start checking from 2 days ago
+      // If most recent is today, start checking from yesterday
+      expectedDate.setDate(expectedDate.getDate() - 1)
+
+      // Check consecutive days
+      for (let i = 1; i < sortedRecords.length; i++) {
+        const currentDate = new Date(sortedRecords[i].date)
+        currentDate.setHours(0, 0, 0, 0)
+
+        if (currentDate.getTime() === expectedDate.getTime()) {
+          streak++
+          expectedDate.setDate(expectedDate.getDate() - 1)
+        } else {
+          break // Break the streak if not consecutive
+        }
+      }
+
+      return streak
     }
   },
   created() {
@@ -275,6 +367,9 @@ export default {
           // Sort by date (newest first)
           this.attendanceHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date))
           this.filterAttendanceHistory()
+
+          // Reset chart type to ensure proper rendering
+          this.activeChartType = 'monthly'
         } else {
           this.attendanceHistory = []
           this.filteredHistory = []
@@ -489,6 +584,13 @@ export default {
         ...this.expandedMonths,
         [month]: !this.expandedMonths[month]
       }
+    },
+
+    hasMarkedAttendanceToday() {
+      if (!this.attendanceHistory.length) return false
+
+      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+      return this.attendanceHistory.some((record) => record.date === today)
     },
 
     clearSearch() {
@@ -898,6 +1000,99 @@ export default {
 .location {
   color: #666;
   font-size: 0.9em;
+}
+
+.streak-note {
+  display: block;
+  font-size: 10px;
+  color: #ff9800;
+  margin-top: 3px;
+}
+
+.charts-section {
+  margin-bottom: 30px;
+  background-color: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.charts-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.chart-btn {
+  background-color: #f5f5f5;
+  border: none;
+  padding: 8px 15px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.chart-btn.active {
+  background-color: #4caf50;
+  color: white;
+}
+
+.chart-btn:hover:not(.active) {
+  background-color: #e0e0e0;
+}
+
+/* Update stat cards to make them more interactive */
+.stat-card {
+  flex: 1;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 15px;
+  text-align: center;
+  transition: transform 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+
+.stat-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card:nth-child(1) {
+  border-top: 3px solid #9c27b0;
+}
+
+.stat-card:nth-child(2) {
+  border-top: 3px solid #388e3c;
+}
+
+.stat-card:nth-child(3) {
+  border-top: 3px solid #1976d2;
+}
+
+.stat-card:nth-child(4) {
+  border-top: 3px solid #ff9800;
+}
+
+@media (max-width: 768px) {
+  .chart-controls {
+    justify-content: center;
+  }
+}
+
+.not-enough-data {
+  padding: 30px;
+  text-align: center;
+  color: #666;
+  background-color: #f9f9f9;
+  border-radius: 8px;
 }
 
 @media (max-width: 768px) {
