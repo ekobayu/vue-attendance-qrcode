@@ -96,6 +96,80 @@
           />
         </div>
       </div>
+
+      <!-- User-specific remote work permissions -->
+      <div class="user-permissions">
+        <h4>User-Specific Remote Work Permissions</h4>
+        <p class="setting-description">
+          Grant specific users permission to work remotely regardless of the general settings above
+        </p>
+
+        <div class="user-permissions-controls">
+          <div class="toggle-row">
+            <label class="toggle-switch">
+              <input type="checkbox" v-model="settings.enableUserSpecificPermissions" @change="saveSettings" />
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="setting-info">
+              <div class="setting-name">Enable User-Specific Permissions</div>
+              <div class="setting-description">
+                When enabled, users in the list below can work remotely regardless of day/time restrictions
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="settings.enableUserSpecificPermissions" class="user-list-container">
+          <div class="user-search">
+            <input
+              type="text"
+              v-model="userSearch"
+              placeholder="Search users by name or email..."
+              @input="searchUsers"
+              class="search-input"
+            />
+          </div>
+
+          <div class="user-list">
+            <div v-if="loading" class="loading-users">
+              <div class="spinner"></div>
+              <span>Loading users...</span>
+            </div>
+            <div v-else-if="filteredUsers.length === 0" class="no-users">No users found matching your search.</div>
+            <div v-else class="user-items">
+              <div v-for="user in filteredUsers" :key="user.id" class="user-item">
+                <div class="user-info">
+                  <div class="user-name">{{ user.fullName }}</div>
+                  <div class="user-email">{{ user.email }}</div>
+                </div>
+                <div class="user-permission">
+                  <label class="toggle-switch">
+                    <input
+                      type="checkbox"
+                      :checked="isUserAllowedRemote(user.id)"
+                      @change="toggleUserRemotePermission(user)"
+                    />
+                    <span class="toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-if="settings.allowedRemoteUsers && Object.keys(settings.allowedRemoteUsers).length > 0"
+            class="allowed-users-summary"
+          >
+            <h5>Users with Remote Work Permission ({{ Object.keys(settings.allowedRemoteUsers).length }})</h5>
+            <div class="allowed-users-list">
+              <div v-for="(allowed, userId) in settings.allowedRemoteUsers" :key="userId" class="allowed-user">
+                <span>{{ getUserName(userId) }}</span>
+                <button @click="removeUserRemotePermission(userId)" class="remove-btn">✕</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -140,9 +214,16 @@ export default {
         endTime: '17:00',
         requireLocation: true,
         limitPerWeek: false,
-        maxDaysPerWeek: 3
+        maxDaysPerWeek: 3,
+        enableUserSpecificPermissions: false,
+        allowedRemoteUsers: {} // userId: true for users allowed to work remotely
       },
-      saveTimeout: null
+      saveTimeout: null,
+      users: [], // All users from the database
+      filteredUsers: [], // Users filtered by search
+      userSearch: '', // Search query for users
+      loading: false, // Loading state for users
+      userMap: {} // Map of userId to user object for quick lookup
     }
   },
   mounted() {
@@ -160,26 +241,140 @@ export default {
             ...this.settings,
             ...snapshot.val()
           }
+
+          // Ensure allowedRemoteUsers exists
+          if (!this.settings.allowedRemoteUsers) {
+            this.settings.allowedRemoteUsers = {}
+          }
+        }
+
+        // Load users if user-specific permissions are enabled
+        if (this.settings.enableUserSpecificPermissions) {
+          this.loadUsers()
         }
       } catch (error) {
         console.error('Error loading remote work settings:', error)
-        this.toast.error('Failed to load settings: ' + error.message)
-        this.showToast('error', 'Failed to save settings: ' + error.message)
+        this.showToast('error', 'Failed to load settings: ' + error.message)
       }
     },
 
     async saveSettings() {
-      // this.showToast('info', 'Saving settings...', { timeout: false })
       try {
         const settingsRef = dbRef(db, 'settings/remoteWork')
         await set(settingsRef, this.settings)
-
-        // Dismiss loading toast and show success
         this.showToast('success', 'Settings saved successfully')
+
+        // Load users if user-specific permissions were just enabled
+        if (this.settings.enableUserSpecificPermissions && this.users.length === 0) {
+          this.loadUsers()
+        }
       } catch (error) {
         console.error('Error saving remote work settings:', error)
         this.showToast('error', 'Failed to save settings: ' + error.message)
       }
+    },
+
+    async loadUsers() {
+      this.loading = true
+      try {
+        const usersRef = dbRef(db, 'users')
+        const snapshot = await get(usersRef)
+
+        if (snapshot.exists()) {
+          const usersData = snapshot.val()
+          this.users = Object.keys(usersData).map((uid) => ({
+            id: uid,
+            ...usersData[uid]
+          }))
+
+          // Create a map for quick user lookup
+          this.userMap = {}
+          this.users.forEach((user) => {
+            this.userMap[user.id] = user
+          })
+
+          // Initialize filtered users
+          this.filteredUsers = [...this.users]
+        } else {
+          this.users = []
+          this.filteredUsers = []
+        }
+      } catch (error) {
+        console.error('Error loading users:', error)
+        this.showToast('error', 'Failed to load users: ' + error.message)
+      } finally {
+        this.loading = false
+      }
+    },
+
+    searchUsers() {
+      if (!this.userSearch.trim()) {
+        this.filteredUsers = [...this.users]
+        return
+      }
+
+      const query = this.userSearch.toLowerCase()
+      this.filteredUsers = this.users.filter(
+        (user) =>
+          (user.fullName && user.fullName.toLowerCase().includes(query)) ||
+          (user.email && user.email.toLowerCase().includes(query))
+      )
+    },
+
+    isUserAllowedRemote(userId) {
+      return this.settings.allowedRemoteUsers && this.settings.allowedRemoteUsers[userId] === true
+    },
+
+    toggleUserRemotePermission(user) {
+      // Initialize if not exists
+      if (!this.settings.allowedRemoteUsers) {
+        this.settings.allowedRemoteUsers = {}
+      }
+
+      // Toggle permission
+      if (this.isUserAllowedRemote(user.id)) {
+        // Remove permission - Vue 3 way
+        const newAllowedUsers = { ...this.settings.allowedRemoteUsers }
+        delete newAllowedUsers[user.id]
+        this.settings.allowedRemoteUsers = newAllowedUsers
+
+        this.showToast('info', `Remote work permission removed for ${user.fullName}`)
+      } else {
+        // Add permission - Vue 3 way
+        this.settings.allowedRemoteUsers = {
+          ...this.settings.allowedRemoteUsers,
+          [user.id]: true
+        }
+
+        this.showToast('success', `Remote work permission granted to ${user.fullName}`)
+      }
+
+      // Save settings
+      this.saveSettings()
+    },
+
+    removeUserRemotePermission(userId) {
+      if (this.settings.allowedRemoteUsers && this.settings.allowedRemoteUsers[userId]) {
+        // Get user name for the toast message
+        const userName = this.getUserName(userId)
+
+        // Remove permission - Vue 3 way
+        const newAllowedUsers = { ...this.settings.allowedRemoteUsers }
+        delete newAllowedUsers[userId]
+        this.settings.allowedRemoteUsers = newAllowedUsers
+
+        this.showToast('info', `Remote work permission removed for ${userName}`)
+
+        // Save settings
+        this.saveSettings()
+      }
+    },
+
+    getUserName(userId) {
+      if (this.userMap[userId]) {
+        return this.userMap[userId].fullName || this.userMap[userId].email || 'Unknown User'
+      }
+      return 'Unknown User'
     }
   }
 }
@@ -261,7 +456,8 @@ export default {
   font-style: italic;
 }
 
-.setting-row {
+.setting-row,
+.toggle-row {
   display: flex;
   align-items: center;
   padding: 15px;
@@ -278,6 +474,7 @@ export default {
   width: 50px;
   height: 24px;
   margin-right: 15px;
+  flex-shrink: 0;
 }
 
 .toggle-switch input {
@@ -335,6 +532,146 @@ input:checked + .toggle-slider:before {
   text-align: center;
 }
 
+/* User permissions styles */
+.user-permissions {
+  margin-top: 30px;
+  border-top: 1px solid #eee;
+  padding-top: 20px;
+}
+
+.user-permissions h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.user-permissions-controls {
+  margin-bottom: 20px;
+}
+
+.user-list-container {
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.user-search {
+  margin-bottom: 15px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.user-list {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  background-color: white;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.loading-users,
+.no-users {
+  padding: 20px;
+  text-align: center;
+  color: #666;
+}
+
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #4caf50;
+  animation: spin 1s linear infinite;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.user-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  border-bottom: 1px solid #eee;
+}
+
+.user-item:last-child {
+  border-bottom: none;
+}
+
+.user-info {
+  flex: 1;
+}
+
+.user-name {
+  font-weight: bold;
+  color: #333;
+}
+
+.user-email {
+  font-size: 0.9em;
+  color: #666;
+}
+
+.user-permission {
+  margin-left: 15px;
+}
+
+.allowed-users-summary {
+  margin-top: 20px;
+}
+
+.allowed-users-summary h5 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1em;
+  color: #333;
+}
+
+.allowed-users-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.allowed-user {
+  display: flex;
+  align-items: center;
+  background-color: #e3f2fd;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  color: #1976d2;
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: #f44336;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 5px;
+  padding: 0 5px;
+}
+
+.remove-btn:hover {
+  background-color: rgba(244, 67, 54, 0.1);
+  border-radius: 50%;
+}
+
 @media (max-width: 768px) {
   .time-inputs {
     flex-direction: column;
@@ -348,6 +685,17 @@ input:checked + .toggle-slider:before {
 
   .checkbox-label {
     width: 100%;
+  }
+
+  .user-item {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .user-permission {
+    margin-left: 0;
+    margin-top: 10px;
+    align-self: flex-end;
   }
 }
 </style>

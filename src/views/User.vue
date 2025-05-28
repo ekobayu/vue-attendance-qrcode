@@ -240,6 +240,16 @@ export default {
     isRemoteWorkEnabled() {
       if (!this.remoteWorkLoaded || !this.remoteWorkSettings) return false
 
+      // Check if user-specific permissions are enabled and if this user has permission
+      if (
+        this.remoteWorkSettings.enableUserSpecificPermissions &&
+        this.remoteWorkSettings.allowedRemoteUsers &&
+        this.remoteWorkSettings.allowedRemoteUsers[this.user.uid]
+      ) {
+        // User has specific permission to work remotely regardless of other restrictions
+        return true
+      }
+
       // Get current day and time
       const now = new Date()
       const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
@@ -518,6 +528,15 @@ export default {
     getRemoteWorkUnavailableReason() {
       if (!this.remoteWorkLoaded || !this.remoteWorkSettings) return 'while settings are loading...'
 
+      // If user-specific permissions are enabled, check if this user is not in the allowed list
+      if (
+        this.remoteWorkSettings.enableUserSpecificPermissions &&
+        this.remoteWorkSettings.allowedRemoteUsers &&
+        !this.remoteWorkSettings.allowedRemoteUsers[this.user.uid]
+      ) {
+        return 'as you do not have permission for remote work.'
+      }
+
       const now = new Date()
       const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
       const currentDay = dayNames[now.getDay()]
@@ -539,7 +558,10 @@ export default {
           hour: '2-digit',
           minute: '2-digit'
         })
-        const endTimeDisplay = new Date(endTimeFormatted).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        const endTimeDisplay = new Date(endTimeFormatted).toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
 
         const currentTime = now.getHours() * 60 + now.getMinutes()
         const startTime = startHours * 60 + startMinutes

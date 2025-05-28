@@ -36,7 +36,13 @@
         <div class="form-group">
           <label for="location">Working From:</label>
           <div class="location-input">
-            <input disabled type="text" id="location" v-model="location" placeholder="e.g. Home Office, Cafe, etc." />
+            <input
+              disabled
+              type="text"
+              id="location"
+              v-model="location"
+              placeholder="Click the blue button to get current location"
+            />
             <button
               @click="getCurrentLocation"
               class="location-btn"
