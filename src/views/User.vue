@@ -19,10 +19,10 @@
 
       <!-- Tabs Navigation -->
       <div class="tabs">
-        <button @click="activeTab = 'mark'" :class="{ active: activeTab === 'mark' }" class="tab-btn">
+        <button @click="switchTab('mark')" :class="{ active: activeTab === 'mark' }" class="tab-btn">
           Mark Attendance
         </button>
-        <button @click="activeTab = 'history'" :class="{ active: activeTab === 'history' }" class="tab-btn">
+        <button @click="switchTab('history')" :class="{ active: activeTab === 'history' }" class="tab-btn">
           Attendance History
         </button>
       </div>
@@ -81,10 +81,10 @@
             </select>
           </div>
 
-          <div class="search-box">
+          <!-- <div class="search-box">
             <input type="text" v-model="searchQuery" placeholder="Search..." @input="filterAttendanceHistory" />
             <button v-if="searchQuery" @click="clearSearch" class="clear-search">✕</button>
-          </div>
+          </div> -->
         </div>
 
         <!-- Charts Section -->
@@ -158,9 +158,9 @@
                 </div>
                 <div class="record-details">
                   <div class="timestamp">{{ formatTime(record.timestamp) }}</div>
-                  <div class="session-type" v-if="record.sessionType">
+                  <!-- <div class="session-type" v-if="record.sessionType">
                     {{ getSessionTypeDisplay(record.sessionType) }}
-                  </div>
+                  </div> -->
                   <div class="badge" :class="record.remote ? 'remote-badge' : 'in-person-badge'">
                     {{ record.remote ? 'Remote' : 'Office' }}
                   </div>
@@ -341,10 +341,28 @@ export default {
     this.loadRemoteWorkSettings()
   },
   methods: {
-    async loadAttendanceHistory() {
+    switchTab(tabName) {
+      // If switching to history tab, refresh the data
+      if (tabName === 'history' && this.activeTab !== 'history') {
+        this.loadAttendanceHistory(true) // Pass true to indicate it's a refresh
+      }
+
+      // Set the active tab
+      this.activeTab = tabName
+    },
+
+    async loadAttendanceHistory(isRefresh = false) {
       if (!this.user) return
 
-      this.loading = true
+      // Only show loading indicator if it's not a refresh or if explicitly needed
+      if (!isRefresh) {
+        this.loading = true
+      } else {
+        // For refreshes, we can use a less intrusive loading state
+        // or show a small indicator that data is being refreshed
+        this.refreshing = true
+      }
+
       try {
         const userAttendanceRef = dbRef(db, `user-attendance/${this.user.uid}`)
         const snapshot = await get(userAttendanceRef)
@@ -368,8 +386,10 @@ export default {
           this.attendanceHistory = history.sort((a, b) => new Date(b.date) - new Date(a.date))
           this.filterAttendanceHistory()
 
-          // Reset chart type to ensure proper rendering
-          this.activeChartType = 'monthly'
+          // If it's a refresh, show a toast notification
+          if (isRefresh && this.$toast) {
+            this.$toast.success('Attendance data refreshed')
+          }
         } else {
           this.attendanceHistory = []
           this.filteredHistory = []
@@ -377,8 +397,12 @@ export default {
         }
       } catch (error) {
         console.error('Error loading attendance history:', error)
+        if (isRefresh && this.$toast) {
+          this.$toast.error('Failed to refresh attendance data')
+        }
       } finally {
         this.loading = false
+        this.refreshing = false
       }
     },
 
@@ -620,9 +644,9 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        return 'Office (07:30 AM - 04:30 PM)'
+        return 'Office'
       } else if (type === 'morning') {
-        return 'Morning (07:30 AM - 04:30 PM)'
+        return 'Morning'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
@@ -729,57 +753,260 @@ export default {
   border-radius: 8px;
 }
 
+/* Enhanced History Item Styling */
 .history-list {
   margin-top: 15px;
   background-color: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   overflow: hidden;
 }
 
 .history-item {
   display: flex;
   justify-content: space-between;
-  padding: 15px;
-  border-bottom: 1px solid #eee;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
   align-items: center;
+  transition: background-color 0.2s ease;
+}
+
+.history-item:hover {
+  background-color: #f9f9f9;
 }
 
 .history-item:last-child {
   border-bottom: none;
 }
 
-.date {
-  font-weight: bold;
+.history-item .date {
+  font-weight: 600;
+  color: #333;
+  font-size: 15px;
 }
 
 .record-details {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .timestamp {
   color: #666;
   font-size: 0.9em;
+  background-color: #f5f5f5;
+  padding: 4px 8px;
+  border-radius: 4px;
 }
 
 .badge {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
   font-size: 12px;
-  font-weight: bold;
+  font-weight: 600;
+  letter-spacing: 0.3px;
 }
 
 .remote-badge {
   background-color: #e3f2fd;
   color: #1976d2;
+  border: 1px solid rgba(25, 118, 210, 0.2);
+}
+
+.remote-badge::before {
+  content: '🏠';
+  margin-right: 5px;
+  font-size: 12px;
 }
 
 .in-person-badge {
   background-color: #e8f5e9;
   color: #388e3c;
+  border: 1px solid rgba(56, 142, 60, 0.2);
+}
+
+.in-person-badge::before {
+  content: '🏢';
+  margin-right: 5px;
+  font-size: 12px;
+}
+
+/* Detailed history items in the monthly view */
+.history-item.detailed {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  align-items: center;
+  transition: all 0.2s ease;
+  border-left: 4px solid transparent;
+}
+
+.history-item.detailed:hover {
+  background-color: #f9f9f9;
+  border-left-color: #4caf50;
+}
+
+.history-item.detailed:last-child {
+  border-bottom: none;
+}
+
+.date-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.day-name {
+  font-weight: 700;
+  color: #333;
+  font-size: 16px;
+}
+
+.date {
+  color: #666;
+  font-size: 14px;
+}
+
+.record-details {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.session-type {
+  color: #555;
+  font-style: italic;
+  background-color: #f5f5f5;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.location {
+  color: #666;
+  font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.location::before {
+  content: '📍';
+  font-size: 12px;
+}
+
+/* Month group styling */
+.month-group {
+  margin-bottom: 24px;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.3s ease;
+}
+
+.month-group:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.month-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background-color: #f8f8f8;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.month-header:hover {
+  background-color: #f0f0f0;
+}
+
+.month-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.expand-icon {
+  color: #666;
+  font-size: 12px;
+  width: 12px;
+  transition: transform 0.2s ease;
+}
+
+.month-header:hover .expand-icon {
+  color: #333;
+}
+
+.month-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 1.1em;
+  font-weight: 600;
+}
+
+.record-count {
+  background-color: #e0e0e0;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  color: #555;
+  font-weight: 500;
+}
+
+.month-records {
+  padding: 8px;
+  background-color: #fff;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .history-item.detailed {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .record-details {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .badge,
+  .timestamp,
+  .session-type {
+    font-size: 11px;
+  }
+
+  .day-name {
+    font-size: 15px;
+  }
+
+  .date {
+    font-size: 13px;
+  }
+}
+
+/* Animation for expanding/collapsing month sections */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (max-width: 768px) {
@@ -906,102 +1133,6 @@ export default {
   margin-top: 5px;
 }
 
-.month-group {
-  margin-bottom: 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.month-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  background-color: #f5f5f5;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.month-header:hover {
-  background-color: #e8e8e8;
-}
-
-.month-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.expand-icon {
-  color: #666;
-  font-size: 12px;
-  width: 12px;
-}
-
-.month-header h3 {
-  margin: 0;
-  color: #333;
-  font-size: 1.1em;
-}
-
-.record-count {
-  background-color: #e0e0e0;
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 0.9em;
-  color: #555;
-}
-
-.month-records {
-  padding: 10px;
-  background-color: #fff;
-  animation: fadeIn 0.3s ease-in-out;
-}
-
-.history-item.detailed {
-  display: flex;
-  justify-content: space-between;
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-  align-items: center;
-}
-
-.history-item.detailed:last-child {
-  border-bottom: none;
-}
-
-.date-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.day-name {
-  font-weight: bold;
-  color: #333;
-}
-
-.date {
-  color: #666;
-}
-
-.record-details {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  flex-wrap: wrap;
-}
-
-.session-type {
-  color: #555;
-  font-style: italic;
-}
-
-.location {
-  color: #666;
-  font-size: 0.9em;
-}
-
 .streak-note {
   display: block;
   font-size: 10px;
@@ -1099,16 +1230,6 @@ export default {
   .attendance-stats {
     flex-direction: column;
     gap: 10px;
-  }
-
-  .history-item.detailed {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 10px;
-  }
-
-  .record-details {
-    width: 100%;
   }
 }
 </style>

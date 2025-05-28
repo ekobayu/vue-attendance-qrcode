@@ -880,9 +880,9 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        return 'Office (07:30 AM - 04:30 PM)'
+        return 'Office'
       } else if (type === 'morning') {
-        return 'Morning (07:30 AM - 04:30 PM)'
+        return 'Morning'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
