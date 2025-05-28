@@ -46,9 +46,9 @@
               <th @click="sortTable('timestamp')" :class="getSortClass('timestamp')">
                 Time <span class="sort-icon">{{ getSortIcon('timestamp') }}</span>
               </th>
-              <th @click="sortTable('sessionType')" :class="getSortClass('sessionType')">
+              <!-- <th @click="sortTable('sessionType')" :class="getSortClass('sessionType')">
                 Session <span class="sort-icon">{{ getSortIcon('sessionType') }}</span>
-              </th>
+              </th> -->
               <th @click="sortTable('remote')" :class="getSortClass('remote')">
                 Type <span class="sort-icon">{{ getSortIcon('remote') }}</span>
               </th>
@@ -64,7 +64,7 @@
               <td>{{ index + 1 }}</td>
               <td>{{ attendee.email }}</td>
               <td>{{ formatTime(attendee.timestamp) }}</td>
-              <td>{{ getSessionTypeDisplay(attendee.sessionType) }}</td>
+              <!-- <td>{{ getSessionTypeDisplay(attendee.sessionType) }}</td> -->
               <td>
                 <span :class="attendee.remote ? 'remote-badge' : 'in-person-badge'">
                   {{ attendee.remote ? 'Remote' : 'Office' }}

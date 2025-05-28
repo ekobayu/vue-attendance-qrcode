@@ -97,21 +97,33 @@
         </div>
       </div>
     </div>
-
-    <div class="save-status" v-if="saveStatus">
-      <div class="status-message" :class="saveStatus.type">
-        {{ saveStatus.message }}
-      </div>
-    </div>
   </div>
 </template>
 
 <script>
 import { db } from '../firebase/config'
 import { ref as dbRef, get, set } from 'firebase/database'
+import { useToast } from 'vue-toastification'
 
 export default {
   name: 'RemoteWorkSettings',
+  setup() {
+    const toast = useToast()
+
+    return {
+      showToast(type, message, options = {}) {
+        if (type === 'success') {
+          toast.success(message, options)
+        } else if (type === 'error') {
+          toast.error(message, options)
+        } else if (type === 'info') {
+          toast.info(message, options)
+        } else if (type === 'warning') {
+          toast.warning(message, options)
+        }
+      }
+    }
+  },
   data() {
     return {
       settings: {
@@ -130,7 +142,6 @@ export default {
         limitPerWeek: false,
         maxDaysPerWeek: 3
       },
-      saveStatus: null,
       saveTimeout: null
     }
   },
@@ -152,35 +163,23 @@ export default {
         }
       } catch (error) {
         console.error('Error loading remote work settings:', error)
-        this.showSaveStatus('error', 'Failed to load settings: ' + error.message)
+        this.toast.error('Failed to load settings: ' + error.message)
+        this.showToast('error', 'Failed to save settings: ' + error.message)
       }
     },
 
     async saveSettings() {
+      // this.showToast('info', 'Saving settings...', { timeout: false })
       try {
         const settingsRef = dbRef(db, 'settings/remoteWork')
         await set(settingsRef, this.settings)
 
-        this.showSaveStatus('success', 'Settings saved successfully')
+        // Dismiss loading toast and show success
+        this.showToast('success', 'Settings saved successfully')
       } catch (error) {
         console.error('Error saving remote work settings:', error)
-        this.showSaveStatus('error', 'Failed to save settings: ' + error.message)
+        this.showToast('error', 'Failed to save settings: ' + error.message)
       }
-    },
-
-    showSaveStatus(type, message) {
-      // Clear any existing timeout
-      if (this.saveTimeout) {
-        clearTimeout(this.saveTimeout)
-      }
-
-      // Show status message
-      this.saveStatus = { type, message }
-
-      // Clear message after 3 seconds
-      this.saveTimeout = setTimeout(() => {
-        this.saveStatus = null
-      }, 3000)
     }
   }
 }
@@ -334,40 +333,6 @@ input:checked + .toggle-slider:before {
   border: 1px solid #ddd;
   border-radius: 4px;
   text-align: center;
-}
-
-.save-status {
-  position: absolute;
-  bottom: 15px;
-  right: 15px;
-  animation: fadeIn 0.3s ease-out;
-}
-
-.status-message {
-  padding: 8px 15px;
-  border-radius: 4px;
-  font-size: 14px;
-}
-
-.status-message.success {
-  background-color: #e8f5e9;
-  color: #2e7d32;
-}
-
-.status-message.error {
-  background-color: #ffebee;
-  color: #c62828;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 @media (max-width: 768px) {

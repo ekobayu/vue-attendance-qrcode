@@ -28,10 +28,6 @@
           {{ saving ? 'Saving...' : 'Save Settings' }}
         </button>
       </div>
-
-      <div v-if="message" :class="['message', messageType]">
-        {{ message }}
-      </div>
     </div>
   </div>
 </template>
@@ -39,17 +35,36 @@
 <script>
 import { ref as dbRef, get, update } from 'firebase/database'
 import { db } from '../firebase/config'
+import { useToast } from 'vue-toastification'
 
 export default {
   name: 'AutoResetSettings',
+  setup() {
+    const toast = useToast()
+
+    // Helper function to show toast messages
+    const showToast = (type, message, options = {}) => {
+      if (type === 'success') {
+        toast.success(message, options)
+      } else if (type === 'error') {
+        toast.error(message, options)
+      } else if (type === 'info') {
+        toast.info(message, options)
+      } else if (type === 'warning') {
+        toast.warning(message, options)
+      }
+    }
+
+    return {
+      showToast
+    }
+  },
   data() {
     return {
       resetHours: 16, // Default to 16 hours
       resetTime: '08:00', // Default to 8 AM
       currentSettings: {},
-      saving: false,
-      message: '',
-      messageType: 'info'
+      saving: false
     }
   },
   mounted() {
@@ -68,11 +83,12 @@ export default {
         }
       } catch (error) {
         console.error('Error loading settings:', error)
-        this.showMessage('Failed to load settings', 'error')
+        this.showToast('error', 'Failed to load settings: ' + error.message)
       }
     },
 
     async saveSettings() {
+      if (this.saving) return
       this.saving = true
 
       try {
@@ -97,11 +113,15 @@ export default {
           })
         }
 
-        this.showMessage('Settings saved successfully', 'success')
+        // Show success toast
+        this.showToast('success', 'Settings saved successfully', {
+          timeout: 3000
+        })
+
         this.loadCurrentSettings() // Reload settings
       } catch (error) {
         console.error('Error saving settings:', error)
-        this.showMessage('Failed to save settings', 'error')
+        this.showToast('error', 'Failed to save settings: ' + error.message)
       } finally {
         this.saving = false
       }
@@ -135,16 +155,6 @@ export default {
       return nextReset.getTime()
     },
 
-    showMessage(text, type = 'info') {
-      this.message = text
-      this.messageType = type
-
-      setTimeout(() => {
-        this.message = ''
-        this.messageType = 'info'
-      }, 3000)
-    },
-
     formatTime(timeString) {
       if (!timeString) return 'Not set'
 
@@ -176,6 +186,7 @@ export default {
 </script>
 
 <style scoped>
+/* Your styles remain unchanged */
 .auto-reset-settings {
   max-width: 600px;
   margin: 0 auto;
@@ -254,26 +265,5 @@ input[type='time'] {
 .save-btn:disabled {
   background-color: #cccccc;
   cursor: not-allowed;
-}
-
-.message {
-  margin-top: 15px;
-  padding: 10px;
-  border-radius: 4px;
-}
-
-.message.success {
-  background-color: #dff0d8;
-  color: #3c763d;
-}
-
-.message.error {
-  background-color: #f2dede;
-  color: #a94442;
-}
-
-.message.info {
-  background-color: #d9edf7;
-  color: #31708f;
 }
 </style>
