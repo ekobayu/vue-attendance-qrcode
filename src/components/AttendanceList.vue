@@ -56,6 +56,7 @@
                 Location <span class="sort-icon">{{ getSortIcon('location') }}</span>
               </th>
               <th v-if="hasRemoteAttendees">Map</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -81,6 +82,11 @@
                 >
                   <span class="map-icon">🗺️</span>
                 </a>
+              </td>
+              <td>
+                <button @click="confirmDeleteAttendance(attendee)" class="delete-btn" title="Remove attendance record">
+                  <span class="delete-icon">🗑️</span>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -303,6 +309,7 @@
                 <th>Type</th>
                 <th>Location</th>
                 <th>Map</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -327,6 +334,15 @@
                   >
                     <span class="map-icon">🗺️</span>
                   </a>
+                </td>
+                <td>
+                  <button
+                    @click="confirmRemoveAttendeeFromSession(attendee)"
+                    class="delete-btn"
+                    title="Remove from session"
+                  >
+                    <span class="delete-icon">🗑️</span>
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -363,6 +379,7 @@
 <script>
 import { db } from '../firebase/config'
 import { ref as dbRef, onValue, get, set, remove } from 'firebase/database'
+import { useToast } from 'vue-toastification'
 
 export default {
   name: 'AttendanceList',
@@ -525,6 +542,100 @@ export default {
           this.filteredArchivedSessions = []
         }
       })
+    },
+
+    confirmDeleteAttendance(attendee) {
+      this.confirmModalTitle = 'Remove Attendance Record'
+      this.confirmModalMessage = `Are you sure you want to remove the attendance record for ${attendee.email}?`
+      this.confirmButtonText = 'Remove'
+      this.pendingAction = 'deleteAttendance'
+      this.pendingActionData = attendee
+      this.showConfirmModal = true
+    },
+
+    confirmRemoveAttendeeFromSession(attendee) {
+      this.confirmModalTitle = 'Remove From Session'
+      this.confirmModalMessage = `Are you sure you want to remove ${attendee.email} from this session?`
+      this.confirmButtonText = 'Remove'
+      this.pendingAction = 'removeFromSession'
+      this.pendingActionData = attendee
+      this.showConfirmModal = true
+    },
+
+    async removeAttendeeFromSession(attendee) {
+      const toast = useToast()
+      try {
+        if (!this.selectedSession || !attendee || !attendee.userId) {
+          throw new Error('Missing required information')
+        }
+
+        // Determine path based on whether session is archived
+        const isArchived = !!this.selectedSession.archivedAt
+        const basePath = isArchived ? 'archived-sessions' : 'attendance-sessions'
+
+        // Reference to the specific attendee record in the session
+        const attendeeRef = dbRef(db, `${basePath}/${this.selectedSession.id}/attendees/${attendee.userId}`)
+
+        // Also find and remove from user's personal attendance history
+        const userRef = dbRef(db, `user-attendance/${attendee.userId}/${this.selectedSession.date}`)
+
+        // Remove from session attendees
+        await remove(attendeeRef)
+
+        // Remove from user's attendance history
+        await remove(userRef)
+
+        // Update the attendees list in the modal
+        this.sessionAttendees = this.sessionAttendees.filter((a) => a.userId !== attendee.userId)
+        this.filterModalAttendees()
+
+        // Show success message
+        toast.success(`${attendee.email} has been removed from this session.`, {
+          position: 'top-center',
+          duration: 3000
+        })
+      } catch (error) {
+        console.error('Error removing attendee from session:', error)
+        toast.error(`Failed to remove attendee: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
+      }
+    },
+
+    async deleteAttendanceRecord(attendee) {
+      const toast = useToast()
+      try {
+        if (!this.selectedDate || !attendee || !attendee.id) {
+          throw new Error('Missing required information to delete record')
+        }
+
+        // Reference to the specific attendance record
+        const recordRef = dbRef(db, `daily-attendance/${this.selectedDate}/${attendee.id}`)
+
+        // Also find and remove from user's personal attendance history
+        const userRef = dbRef(db, `user-attendance/${attendee.id}/${this.selectedDate}`)
+
+        // Remove the record from daily attendance
+        await remove(recordRef)
+
+        // Remove from user's attendance history
+        await remove(userRef)
+
+        // Show success message
+        toast.success(`Attendance record for ${attendee.email} has been removed.`, {
+          position: 'top-center',
+          duration: 3000
+        })
+
+        // The real-time listener will automatically update the UI
+      } catch (error) {
+        console.error('Error deleting attendance record:', error)
+        toast.error(`Failed to delete record: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
+      }
     },
 
     filterSessions() {
@@ -850,6 +961,10 @@ export default {
         await this.performArchiveSession(this.pendingActionData)
       } else if (this.pendingAction === 'restore') {
         await this.performRestoreSession(this.pendingActionData)
+      } else if (this.pendingAction === 'deleteAttendance') {
+        await this.deleteAttendanceRecord(this.pendingActionData)
+      } else if (this.pendingAction === 'removeFromSession') {
+        await this.removeAttendeeFromSession(this.pendingActionData)
       }
 
       this.showConfirmModal = false
@@ -1569,5 +1684,35 @@ tr:nth-child(even) {
   .session-summary {
     grid-template-columns: 1fr;
   }
+}
+
+.delete-btn {
+  background-color: transparent;
+  border: none;
+  color: #f44336;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.delete-btn:hover {
+  background-color: #ffebee;
+}
+
+.delete-icon {
+  font-size: 16px;
+}
+
+/* Make the confirmation modal for deletion more prominent */
+.confirmation-modal .modal-content.delete-confirmation {
+  border-left: 4px solid #f44336;
+}
+
+.confirm-btn.delete-confirm {
+  background-color: #f44336;
 }
 </style>
