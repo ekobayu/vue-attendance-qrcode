@@ -277,28 +277,28 @@ export default {
         const today = new Date().toISOString().split('T')[0]
         console.log(`Using current date for new session: ${today}`)
 
-        // Check if today is a weekend
-        if (this.isWeekend(today)) {
-          console.log('Auto-reset skipped: Today is a weekend')
+        // // Check if today is a weekend
+        // if (this.isWeekend(today)) {
+        //   console.log('Auto-reset skipped: Today is a weekend')
 
-          // Calculate next reset time for Monday
-          const nextMonday = new Date()
-          // Add days until we reach Monday (1 = Monday, 0 = Sunday)
-          const daysUntilMonday = nextMonday.getDay() === 0 ? 1 : nextMonday.getDay() === 6 ? 2 : 1
-          nextMonday.setDate(nextMonday.getDate() + daysUntilMonday)
-          nextMonday.setHours(7, 30, 0, 0) // Set to 7:30 AM on Monday
+        //   // Calculate next reset time for Monday
+        //   const nextMonday = new Date()
+        //   // Add days until we reach Monday (1 = Monday, 0 = Sunday)
+        //   const daysUntilMonday = nextMonday.getDay() === 0 ? 1 : nextMonday.getDay() === 6 ? 2 : 1
+        //   nextMonday.setDate(nextMonday.getDate() + daysUntilMonday)
+        //   nextMonday.setHours(7, 30, 0, 0) // Set to 7:30 AM on Monday
 
-          // console.log('Next reset scheduled for Monday:', nextMonday.toString())
+        //   // console.log('Next reset scheduled for Monday:', nextMonday.toString())
 
-          // Update active session with new reset time
-          const activeSessionRef = dbRef(db, 'active-session')
-          await set(activeSessionRef, {
-            ...currentSession,
-            nextResetTime: nextMonday.getTime()
-          })
+        //   // Update active session with new reset time
+        //   const activeSessionRef = dbRef(db, 'active-session')
+        //   await set(activeSessionRef, {
+        //     ...currentSession,
+        //     nextResetTime: nextMonday.getTime()
+        //   })
 
-          return false // Exit early, don't create a new session
-        }
+        //   return false // Exit early, don't create a new session
+        // }
 
         // Create a new session ID
         const newSessionId = 'session-' + now.toString()
