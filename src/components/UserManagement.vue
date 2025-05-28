@@ -264,7 +264,10 @@
             Are you sure you want to delete the user <strong>{{ userToDelete?.fullName }}</strong
             >?
           </p>
-          <p class="warning">This action cannot be undone. All user data will be permanently removed.</p>
+          <p class="warning">
+            This action cannot be undone. The user account and all associated attendance records will be permanently
+            removed.
+          </p>
         </div>
 
         <div class="modal-footer">
@@ -648,6 +651,23 @@ export default {
       }
     },
 
+    showToast(type, message, options = {}) {
+      if (this.$toast) {
+        if (type === 'success') {
+          this.$toast.success(message, options)
+        } else if (type === 'error') {
+          this.$toast.error(message, options)
+        } else if (type === 'info') {
+          this.$toast.info(message, options)
+        } else if (type === 'warning') {
+          this.$toast.warning(message, options)
+        }
+      } else {
+        // Fallback to alert if toast is not available
+        alert(message)
+      }
+    },
+
     confirmDeleteUser(user) {
       this.userToDelete = user
       this.showDeleteModal = true
@@ -659,12 +679,93 @@ export default {
       this.deleteInProgress = true
 
       try {
-        // Delete user data from database
-        const userRef = dbRef(db, `users/${this.userToDelete.id}`)
+        const userId = this.userToDelete.id
+        const userEmail = this.userToDelete.email
+
+        // Show loading toast
+        this.showToast('info', `Deleting user ${userEmail} and all associated data...`, {
+          timeout: false // Don't auto-close
+        })
+
+        // 1. Delete user's attendance records from daily-attendance
+        // First, we need to find all dates where this user has attendance
+        const dailyAttendanceRef = dbRef(db, 'daily-attendance')
+        const dailySnapshot = await get(dailyAttendanceRef)
+
+        if (dailySnapshot.exists()) {
+          const dailyData = dailySnapshot.val()
+          const deletePromises = []
+
+          // Loop through each date
+          for (const date in dailyData) {
+            // Check if this user has an entry for this date
+            if (dailyData[date] && dailyData[date][userId]) {
+              const recordRef = dbRef(db, `daily-attendance/${date}/${userId}`)
+              deletePromises.push(remove(recordRef))
+            }
+          }
+
+          // Wait for all daily attendance records to be deleted
+          if (deletePromises.length > 0) {
+            await Promise.all(deletePromises)
+          }
+        }
+
+        // 2. Delete user's personal attendance history
+        const userAttendanceRef = dbRef(db, `user-attendance/${userId}`)
+        await remove(userAttendanceRef)
+
+        // 3. Delete user from session attendees
+        // First active sessions
+        const activeSessionsRef = dbRef(db, 'attendance-sessions')
+        const activeSessionsSnapshot = await get(activeSessionsRef)
+
+        if (activeSessionsSnapshot.exists()) {
+          const activeSessions = activeSessionsSnapshot.val()
+          const sessionPromises = []
+
+          // Loop through each session
+          for (const sessionId in activeSessions) {
+            if (activeSessions[sessionId].attendees && activeSessions[sessionId].attendees[userId]) {
+              const attendeeRef = dbRef(db, `attendance-sessions/${sessionId}/attendees/${userId}`)
+              sessionPromises.push(remove(attendeeRef))
+            }
+          }
+
+          // Wait for all session attendee records to be deleted
+          if (sessionPromises.length > 0) {
+            await Promise.all(sessionPromises)
+          }
+        }
+
+        // Then archived sessions
+        const archivedSessionsRef = dbRef(db, 'archived-sessions')
+        const archivedSessionsSnapshot = await get(archivedSessionsRef)
+
+        if (archivedSessionsSnapshot.exists()) {
+          const archivedSessions = archivedSessionsSnapshot.val()
+          const archivedPromises = []
+
+          // Loop through each archived session
+          for (const sessionId in archivedSessions) {
+            if (archivedSessions[sessionId].attendees && archivedSessions[sessionId].attendees[userId]) {
+              const attendeeRef = dbRef(db, `archived-sessions/${sessionId}/attendees/${userId}`)
+              archivedPromises.push(remove(attendeeRef))
+            }
+          }
+
+          // Wait for all archived session attendee records to be deleted
+          if (archivedPromises.length > 0) {
+            await Promise.all(archivedPromises)
+          }
+        }
+
+        // 4. Finally, delete the user data from users collection
+        const userRef = dbRef(db, `users/${userId}`)
         await remove(userRef)
 
-        // Note: Deleting the actual Firebase Auth user would require admin SDK
-        // or a Cloud Function. For this example, we're just removing from the database.
+        // Show success toast
+        this.showToast('success', `User ${userEmail} and all associated data have been deleted successfully`)
 
         // Refresh user list
         await this.loadUsers()
@@ -673,7 +774,7 @@ export default {
         this.userToDelete = null
       } catch (error) {
         console.error('Error deleting user:', error)
-        alert('Failed to delete user: ' + error.message)
+        this.showToast('error', `Failed to delete user: ${error.message}`)
       } finally {
         this.deleteInProgress = false
       }
