@@ -451,6 +451,7 @@ export default {
       // If switching to history tab, refresh the data
       if (tabName === 'history' && this.activeTab !== 'history') {
         this.loadAttendanceHistory(true) // Pass true to indicate it's a refresh
+        this.loadTodayAttendance()
       }
 
       // Set the active tab

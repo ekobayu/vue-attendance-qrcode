@@ -391,7 +391,7 @@ export default {
 
     formatTime(timestamp) {
       if (!timestamp) return ''
-      const options = { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }
+      const options = { hour: '2-digit', minute: '2-digit', hour12: true }
       return new Date(timestamp).toLocaleTimeString(undefined, options)
     }
   }
