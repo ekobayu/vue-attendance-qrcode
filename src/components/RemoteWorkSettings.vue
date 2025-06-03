@@ -59,7 +59,7 @@
         <p class="setting-note">Remote work attendance can only be marked between these hours on enabled days.</p>
       </div>
 
-      <div class="setting-row">
+      <!-- <div class="setting-row">
         <label class="toggle-switch">
           <input type="checkbox" v-model="settings.requireLocation" @change="saveSettings" />
           <span class="toggle-slider"></span>
@@ -70,9 +70,9 @@
             Require employees to enter their location when marking remote attendance
           </div>
         </div>
-      </div>
+      </div> -->
 
-      <div class="setting-row">
+      <!-- <div class="setting-row">
         <label class="toggle-switch">
           <input type="checkbox" v-model="settings.limitPerWeek" @change="saveSettings" />
           <span class="toggle-slider"></span>
@@ -81,7 +81,7 @@
           <div class="setting-name">Limit Remote Days Per Week</div>
           <div class="setting-description">Limit the number of days an employee can work remotely per week</div>
         </div>
-      </div>
+      </div> -->
 
       <div class="setting-row" v-if="settings.limitPerWeek">
         <div class="setting-info">
@@ -681,10 +681,6 @@ input:checked + .toggle-slider:before {
   .checkbox-group {
     flex-direction: column;
     gap: 5px;
-  }
-
-  .checkbox-label {
-    width: 100%;
   }
 
   .user-item {

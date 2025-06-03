@@ -903,7 +903,6 @@ export default {
 .user {
   max-width: 800px;
   margin: 0 auto;
-  padding: 20px;
 }
 
 .user-info {

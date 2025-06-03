@@ -188,7 +188,7 @@ export default {
 <style scoped>
 /* Your styles remain unchanged */
 .auto-reset-settings {
-  max-width: 600px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 20px;
 }
