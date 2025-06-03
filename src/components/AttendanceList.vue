@@ -63,20 +63,38 @@
             <tr v-for="(attendee, index) in filteredAttendees" :key="attendee.userId">
               <td>{{ index + 1 }}</td>
               <td>{{ attendee.email }}</td>
-              <td>{{ formatTime(attendee.inTime) }}</td>
               <td>
-                <span v-if="attendee.outTime">{{ formatTime(attendee.outTime) }}</span>
+                {{ formatTime(attendee.inTime) }}
+                <span
+                  v-if="attendee.mixed"
+                  class="mini-badge"
+                  :class="attendee.firstScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                >
+                  {{ attendee.firstScanDetails.remote ? 'Remote' : 'Office' }}
+                </span>
+              </td>
+              <td>
+                <span v-if="attendee.outTime">
+                  {{ formatTime(attendee.outTime) }}
+                  <span
+                    v-if="attendee.mixed"
+                    class="mini-badge"
+                    :class="attendee.secondScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                  >
+                    {{ attendee.secondScanDetails.remote ? 'Remote' : 'Office' }}
+                  </span>
+                </span>
                 <span v-else class="pending-badge">Pending</span>
               </td>
               <td>
-                <span :class="attendee.remote ? 'remote-badge' : 'in-person-badge'">
-                  {{ attendee.remote ? 'Remote' : 'Office' }}
+                <span :class="attendee.badgeType">
+                  {{ attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office' }}
                 </span>
               </td>
-              <td>{{ attendee.remote ? attendee.location : 'Office' }}</td>
+              <td>{{ attendee.location }}</td>
               <td v-if="hasRemoteAttendees">
                 <a
-                  v-if="attendee.remote && (attendee.mapsUrl || hasCoordinates(attendee))"
+                  v-if="(attendee.remote || attendee.mixed) && (attendee.mapsUrl || hasCoordinates(attendee))"
                   :href="attendee.mapsUrl || getGoogleMapsUrl(attendee)"
                   target="_blank"
                   rel="noopener noreferrer"
@@ -446,7 +464,7 @@ export default {
       return Math.ceil(this.filteredData.length / this.itemsPerPage)
     },
     hasRemoteAttendees() {
-      return this.filteredAttendees.some((attendee) => attendee.remote)
+      return this.filteredAttendees.some((attendee) => attendee.remote || attendee.mixed)
     }
   },
   watch: {
@@ -539,17 +557,58 @@ export default {
         const firstRecord = records[0]
         const lastRecord = records.length > 1 ? records[records.length - 1] : null
 
+        // Determine attendance type (office, remote, or mixed)
+        let attendanceType = 'office'
+        let badgeType = 'in-person-badge'
+        let location = 'Office'
+
+        if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
+          // Both records are remote or only first scan exists and is remote
+          attendanceType = 'remote'
+          badgeType = 'remote-badge'
+          location = firstRecord.location || ''
+        } else if (!firstRecord.remote && lastRecord && !lastRecord.remote) {
+          // Both records are office
+          attendanceType = 'office'
+          badgeType = 'in-person-badge'
+          location = 'Office'
+        } else if (firstRecord && lastRecord) {
+          // Mixed: one scan is remote, one is office
+          attendanceType = 'mixed'
+          badgeType = 'mixed-badge'
+
+          // For mixed, prioritize showing remote location
+          if (firstRecord.remote) {
+            location = firstRecord.location || ''
+          } else if (lastRecord.remote) {
+            location = lastRecord.location || ''
+          }
+        }
+
         // Create a combined record with in/out times
         return {
           userId: firstRecord.userId,
           email: firstRecord.email,
           inTime: firstRecord.timestamp,
           outTime: lastRecord && lastRecord !== firstRecord ? lastRecord.timestamp : null,
-          remote: firstRecord.remote,
-          location: firstRecord.location || 'Office',
-          coordinates: firstRecord.coordinates,
-          mapsUrl: firstRecord.mapsUrl,
+          remote: attendanceType === 'remote',
+          mixed: attendanceType === 'mixed',
+          badgeType: badgeType,
+          location: location,
+          coordinates: firstRecord.remote
+            ? firstRecord.coordinates
+            : lastRecord && lastRecord.remote
+            ? lastRecord.coordinates
+            : null,
+          mapsUrl: firstRecord.remote
+            ? firstRecord.mapsUrl
+            : lastRecord && lastRecord.remote
+            ? lastRecord.mapsUrl
+            : null,
           sessionType: firstRecord.sessionType,
+          // Store details of both records for reference
+          firstScanDetails: firstRecord,
+          secondScanDetails: lastRecord,
           // Store all record IDs for potential deletion
           recordIds: records.map((r) => r.id),
           // Store original index for sorting
@@ -1110,24 +1169,54 @@ export default {
     exportToCSV() {
       if (!this.uniqueAttendees.length) return
 
-      const headers = ['No', 'Email', 'In Time', 'Out Time', 'Type', 'Location', 'Maps Link']
+      const headers = [
+        'No',
+        'Email',
+        'In Time',
+        'In Type',
+        'Out Time',
+        'Out Type',
+        'Attendance Type',
+        'Location',
+        'Maps Link'
+      ]
 
       // Use all filtered data, not just the current page
       let csvContent = headers.join(',') + '\n'
 
       this.filteredData.forEach((attendee, index) => {
         const mapsUrl =
-          attendee.remote && (attendee.mapsUrl || this.hasCoordinates(attendee))
+          (attendee.remote || attendee.mixed) && (attendee.mapsUrl || this.hasCoordinates(attendee))
             ? attendee.mapsUrl || this.getGoogleMapsUrl(attendee)
             : ''
+
+        const inType = attendee.mixed
+          ? attendee.firstScanDetails.remote
+            ? 'Remote'
+            : 'Office'
+          : attendee.remote
+          ? 'Remote'
+          : 'Office'
+        const outType = attendee.outTime
+          ? attendee.mixed
+            ? attendee.secondScanDetails.remote
+              ? 'Remote'
+              : 'Office'
+            : attendee.remote
+            ? 'Remote'
+            : 'Office'
+          : ''
+        const attendanceType = attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office'
 
         const row = [
           index + 1,
           attendee.email,
           this.formatTime(attendee.inTime),
+          inType,
           attendee.outTime ? this.formatTime(attendee.outTime) : 'Pending',
-          attendee.remote ? 'Remote' : 'Office',
-          attendee.remote ? attendee.location : 'Office',
+          outType,
+          attendanceType,
+          attendee.location,
           mapsUrl
         ]
 
@@ -1779,5 +1868,50 @@ tr:nth-child(even) {
 
 .confirm-btn.delete-confirm {
   background-color: #f44336;
+}
+
+.mixed-badge {
+  background-color: #e1f5fe;
+  color: #0277bd;
+  border: 1px solid rgba(2, 119, 189, 0.2);
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.mixed-badge::before {
+  content: '🔄';
+  margin-right: 5px;
+  font-size: 12px;
+}
+
+.mini-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 5px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.remote-mini {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.office-mini {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.pending-badge {
+  background-color: #fff8e1;
+  color: #ffa000;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
 }
 </style>

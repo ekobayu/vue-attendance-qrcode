@@ -204,16 +204,33 @@
                     <div class="scan-time" v-if="record.firstScan">
                       <span class="scan-label">In:</span>
                       {{ formatTime(record.firstScan) }}
+                      <span
+                        v-if="record.firstScanDetails && record.badgeType === 'mixed'"
+                        class="mini-badge"
+                        :class="record.firstScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                      >
+                        {{ record.firstScanDetails.remote ? 'Remote' : 'Office' }}
+                      </span>
                     </div>
                     <div class="scan-time" v-if="record.secondScan">
                       <span class="scan-label">Out:</span>
                       {{ formatTime(record.secondScan) }}
+                      <span
+                        v-if="record.secondScanDetails && record.badgeType === 'mixed'"
+                        class="mini-badge"
+                        :class="record.secondScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                      >
+                        {{ record.secondScanDetails.remote ? 'Remote' : 'Office' }}
+                      </span>
                     </div>
                   </div>
-                  <div class="badge" :class="record.remote ? 'remote-badge' : 'in-person-badge'">
-                    {{ record.remote ? 'Remote' : 'Office' }}
+
+                  <!-- Update the badge to handle mixed type -->
+                  <div class="badge" :class="getBadgeClass(record)">
+                    {{ getBadgeText(record) }}
                   </div>
-                  <div class="location" v-if="record.remote && record.location">
+
+                  <div class="location" v-if="(record.remote || record.badgeType === 'mixed') && record.location">
                     {{ record.location }}
                   </div>
                 </div>
@@ -411,6 +428,25 @@ export default {
     this.loadRemoteWorkSettings()
   },
   methods: {
+    getBadgeClass(record) {
+      if (record.badgeType === 'mixed') {
+        return 'mixed-badge'
+      } else if (record.remote) {
+        return 'remote-badge'
+      } else {
+        return 'in-person-badge'
+      }
+    },
+
+    getBadgeText(record) {
+      if (record.badgeType === 'mixed') {
+        return 'Mixed'
+      } else if (record.remote) {
+        return 'Remote'
+      } else {
+        return 'Office'
+      }
+    },
     switchTab(tabName) {
       // If switching to history tab, refresh the data
       if (tabName === 'history' && this.activeTab !== 'history') {
@@ -501,22 +537,59 @@ export default {
             // Check if it's the new format (object with multiple records) or old format
             if (typeof dateData === 'object' && !Array.isArray(dateData) && dateData.timestamp === undefined) {
               // New format - it's an object with multiple records
-              // Get the latest record for this date
+              // Get all timestamps for this date
               const timestamps = Object.keys(dateData)
                 .map(Number)
-                .sort((a, b) => b - a)
+                .sort((a, b) => a - b)
+
               if (timestamps.length > 0) {
-                const latestTimestamp = timestamps[0]
-                const record = dateData[latestTimestamp]
+                // Get first scan (check-in)
+                const firstScanTime = timestamps[0]
+                const firstScan = dateData[firstScanTime]
+
+                // Get second scan (check-out) if available
+                const secondScanTime = timestamps.length > 1 ? timestamps[1] : null
+                const secondScan = secondScanTime ? dateData[secondScanTime] : null
+
+                // Determine if the day was remote, office, or mixed
+                let isRemote = false
+                let location = ''
+                let badgeType = ''
+
+                if (firstScan.remote && (!secondScan || secondScan.remote)) {
+                  // Both scans are remote or only first scan exists and is remote
+                  isRemote = true
+                  location = firstScan.location || ''
+                  badgeType = 'remote'
+                } else if (!firstScan.remote && secondScan && !secondScan.remote) {
+                  // Both scans are office
+                  isRemote = false
+                  location = 'Office'
+                  badgeType = 'office'
+                } else if (firstScan && secondScan) {
+                  // Mixed: one scan is remote, one is office
+                  badgeType = 'mixed'
+
+                  // For mixed, prioritize showing remote location
+                  if (firstScan.remote) {
+                    location = firstScan.location || ''
+                  } else if (secondScan.remote) {
+                    location = secondScan.location || ''
+                  }
+                }
 
                 history.push({
-                  date: date, // Use the date key as the date property
-                  timestamp: latestTimestamp,
-                  remote: record.remote || false,
-                  location: record.location || '',
-                  sessionType: record.sessionType || '',
-                  firstScan: timestamps[0],
-                  secondScan: timestamps.length > 1 ? timestamps[1] : null
+                  date: date,
+                  timestamp: firstScanTime, // Use first scan time as primary timestamp
+                  remote: isRemote,
+                  location: location,
+                  sessionType: firstScan.sessionType || '',
+                  firstScan: firstScanTime,
+                  secondScan: secondScanTime,
+                  badgeType: badgeType, // Add badge type for display
+                  // Store both scan details for reference
+                  firstScanDetails: firstScan,
+                  secondScanDetails: secondScan
                 })
               }
             } else {
@@ -525,10 +598,11 @@ export default {
                 date: date,
                 timestamp: dateData.timestamp,
                 remote: dateData.remote || false,
-                location: dateData.location || '',
+                location: dateData.remote ? dateData.location || '' : 'Office',
                 sessionType: dateData.sessionType || '',
                 firstScan: dateData.timestamp,
-                secondScan: null
+                secondScan: null,
+                badgeType: dateData.remote ? 'remote' : 'office'
               })
             }
           }
@@ -1464,5 +1538,34 @@ export default {
 .limit-reached {
   color: #f44336;
   font-weight: bold;
+}
+
+.mixed-badge {
+  background-color: #e1f5fe;
+  color: #0277bd;
+  border: 1px solid rgba(2, 119, 189, 0.2);
+}
+
+.mixed-badge::before {
+  content: '🔄';
+  margin-right: 5px;
+  font-size: 12px;
+}
+
+.mini-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 5px;
+}
+
+.remote-mini {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.office-mini {
+  background-color: #e8f5e9;
+  color: #388e3c;
 }
 </style>

@@ -559,9 +559,9 @@ export default {
             }
           }
 
-          // Set attendanceMarked to true only if viewing the success screen
-          // We'll reset this when the user wants to mark another attendance
-          this.attendanceMarked = true
+          // IMPORTANT: Don't set attendanceMarked to true here
+          // Only set it after the user has submitted the form
+          // this.attendanceMarked = true;
         } else {
           // No attendance records for today
           this.attendanceCount = 0
