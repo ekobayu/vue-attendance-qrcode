@@ -20,7 +20,7 @@
 
         <div class="table-controls">
           <div class="record-count">
-            <span>Total Attendees: {{ attendees.length }}</span>
+            <span>Total Attendees: {{ uniqueAttendees.length }}</span>
           </div>
 
           <div class="search-box">
@@ -43,12 +43,12 @@
               <th @click="sortTable('email')" :class="getSortClass('email')">
                 Email <span class="sort-icon">{{ getSortIcon('email') }}</span>
               </th>
-              <th @click="sortTable('timestamp')" :class="getSortClass('timestamp')">
-                Time <span class="sort-icon">{{ getSortIcon('timestamp') }}</span>
+              <th @click="sortTable('inTime')" :class="getSortClass('inTime')">
+                In Time <span class="sort-icon">{{ getSortIcon('inTime') }}</span>
               </th>
-              <!-- <th @click="sortTable('sessionType')" :class="getSortClass('sessionType')">
-                Session <span class="sort-icon">{{ getSortIcon('sessionType') }}</span>
-              </th> -->
+              <th @click="sortTable('outTime')" :class="getSortClass('outTime')">
+                Out Time <span class="sort-icon">{{ getSortIcon('outTime') }}</span>
+              </th>
               <th @click="sortTable('remote')" :class="getSortClass('remote')">
                 Type <span class="sort-icon">{{ getSortIcon('remote') }}</span>
               </th>
@@ -60,11 +60,14 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(attendee, index) in filteredAttendees" :key="attendee.id">
+            <tr v-for="(attendee, index) in filteredAttendees" :key="attendee.userId">
               <td>{{ index + 1 }}</td>
               <td>{{ attendee.email }}</td>
-              <td>{{ formatTime(attendee.timestamp) }}</td>
-              <!-- <td>{{ getSessionTypeDisplay(attendee.sessionType) }}</td> -->
+              <td>{{ formatTime(attendee.inTime) }}</td>
+              <td>
+                <span v-if="attendee.outTime">{{ formatTime(attendee.outTime) }}</span>
+                <span v-else class="pending-badge">Pending</span>
+              </td>
               <td>
                 <span :class="attendee.remote ? 'remote-badge' : 'in-person-badge'">
                   {{ attendee.remote ? 'Remote' : 'Office' }}
@@ -389,13 +392,14 @@ export default {
       activeTab: 'daily',
       selectedDate: getTodayDateString(), // Today's date in YYYY-MM-DD format
       attendees: [],
+      uniqueAttendees: [], // Grouped by user with in/out times
       sessions: [],
       archivedSessions: [],
       selectedSession: null,
       sessionAttendees: [],
 
       // Sorting and filtering for daily attendance
-      sortKey: 'timestamp',
+      sortKey: 'inTime',
       sortOrder: 'asc',
       searchQuery: '',
       filteredData: [],
@@ -475,6 +479,7 @@ export default {
     async loadDailyAttendance() {
       if (!this.selectedDate) {
         this.attendees = []
+        this.uniqueAttendees = []
         this.filteredData = []
         return
       }
@@ -497,12 +502,58 @@ export default {
                 : null)
           }))
 
-          // Initial sort by timestamp
-          this.sortTable('timestamp')
+          // Group attendees by userId to show in/out times
+          this.processAttendanceRecords()
+
+          // Initial sort by in time
+          this.sortTable('inTime')
           this.filterAttendees()
         } else {
           this.attendees = []
+          this.uniqueAttendees = []
           this.filteredData = []
+        }
+      })
+    },
+
+    processAttendanceRecords() {
+      // Group attendees by userId
+      const userAttendanceMap = new Map()
+
+      // First pass: collect all records for each user
+      this.attendees.forEach((record) => {
+        if (!record.userId) return // Skip records without userId
+
+        if (!userAttendanceMap.has(record.userId)) {
+          userAttendanceMap.set(record.userId, [])
+        }
+        userAttendanceMap.get(record.userId).push(record)
+      })
+
+      // Second pass: process each user's records
+      this.uniqueAttendees = Array.from(userAttendanceMap.values()).map((records) => {
+        // Sort records by timestamp
+        records.sort((a, b) => a.timestamp - b.timestamp)
+
+        // Get the first and last record
+        const firstRecord = records[0]
+        const lastRecord = records.length > 1 ? records[records.length - 1] : null
+
+        // Create a combined record with in/out times
+        return {
+          userId: firstRecord.userId,
+          email: firstRecord.email,
+          inTime: firstRecord.timestamp,
+          outTime: lastRecord && lastRecord !== firstRecord ? lastRecord.timestamp : null,
+          remote: firstRecord.remote,
+          location: firstRecord.location || 'Office',
+          coordinates: firstRecord.coordinates,
+          mapsUrl: firstRecord.mapsUrl,
+          sessionType: firstRecord.sessionType,
+          // Store all record IDs for potential deletion
+          recordIds: records.map((r) => r.id),
+          // Store original index for sorting
+          originalIndex: firstRecord.originalIndex
         }
       })
     },
@@ -607,20 +658,21 @@ export default {
     async deleteAttendanceRecord(attendee) {
       const toast = useToast()
       try {
-        if (!this.selectedDate || !attendee || !attendee.id) {
+        if (!this.selectedDate || !attendee || !attendee.userId) {
           throw new Error('Missing required information to delete record')
         }
 
-        // Reference to the specific attendance record
-        const recordRef = dbRef(db, `daily-attendance/${this.selectedDate}/${attendee.id}`)
+        // Delete all records for this user on this date
+        if (attendee.recordIds && attendee.recordIds.length > 0) {
+          // Delete each record from daily attendance
+          for (const recordId of attendee.recordIds) {
+            const recordRef = dbRef(db, `daily-attendance/${this.selectedDate}/${recordId}`)
+            await remove(recordRef)
+          }
+        }
 
-        // Also find and remove from user's personal attendance history
-        const userRef = dbRef(db, `user-attendance/${attendee.id}/${this.selectedDate}`)
-
-        // Remove the record from daily attendance
-        await remove(recordRef)
-
-        // Remove from user's attendance history
+        // Also remove from user's personal attendance history
+        const userRef = dbRef(db, `user-attendance/${attendee.userId}/${this.selectedDate}`)
         await remove(userRef)
 
         // Show success message
@@ -819,7 +871,7 @@ export default {
 
     filterAttendees() {
       // Filter by search query
-      let filtered = this.attendees
+      let filtered = this.uniqueAttendees
 
       if (this.searchQuery) {
         const query = this.searchQuery.toLowerCase()
@@ -841,8 +893,20 @@ export default {
           case 'email':
             comparison = a.email.localeCompare(b.email)
             break
-          case 'timestamp':
-            comparison = a.timestamp - b.timestamp
+          case 'inTime':
+            comparison = a.inTime - b.inTime
+            break
+          case 'outTime':
+            // Handle null outTime values
+            if (a.outTime === null && b.outTime === null) {
+              comparison = 0
+            } else if (a.outTime === null) {
+              comparison = 1 // Null values come last in ascending order
+            } else if (b.outTime === null) {
+              comparison = -1
+            } else {
+              comparison = a.outTime - b.outTime
+            }
             break
           case 'sessionType':
             comparison = (a.sessionType || '').localeCompare(b.sessionType || '')
@@ -1044,9 +1108,9 @@ export default {
     },
 
     exportToCSV() {
-      if (!this.attendees.length) return
+      if (!this.uniqueAttendees.length) return
 
-      const headers = ['No', 'Email', 'Time', 'Session', 'Type', 'Location', 'Maps Link']
+      const headers = ['No', 'Email', 'In Time', 'Out Time', 'Type', 'Location', 'Maps Link']
 
       // Use all filtered data, not just the current page
       let csvContent = headers.join(',') + '\n'
@@ -1060,8 +1124,8 @@ export default {
         const row = [
           index + 1,
           attendee.email,
-          this.formatTime(attendee.timestamp),
-          this.getSessionTypeDisplay(attendee.sessionType),
+          this.formatTime(attendee.inTime),
+          attendee.outTime ? this.formatTime(attendee.outTime) : 'Pending',
           attendee.remote ? 'Remote' : 'Office',
           attendee.remote ? attendee.location : 'Office',
           mapsUrl

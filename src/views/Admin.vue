@@ -192,7 +192,22 @@ export default {
       const todayAttendanceRef = dbRef(db, `daily-attendance/${today}`)
       onValue(todayAttendanceRef, (snapshot) => {
         const data = snapshot.val()
-        this.todayAttendanceCount = data ? Object.keys(data).length : 0
+        if (data) {
+          // Count unique users instead of total records
+          const uniqueUserIds = new Set()
+
+          // Loop through all attendance records
+          Object.values(data).forEach((record) => {
+            if (record.userId) {
+              uniqueUserIds.add(record.userId)
+            }
+          })
+
+          // Set the count to the number of unique users
+          this.todayAttendanceCount = uniqueUserIds.size
+        } else {
+          this.todayAttendanceCount = 0
+        }
       })
 
       // Get user count
