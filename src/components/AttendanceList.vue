@@ -380,13 +380,14 @@
 import { db } from '../firebase/config'
 import { ref as dbRef, onValue, get, set, remove } from 'firebase/database'
 import { useToast } from 'vue-toastification'
+import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'AttendanceList',
   data() {
     return {
       activeTab: 'daily',
-      selectedDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+      selectedDate: getTodayDateString(), // Today's date in YYYY-MM-DD format
       attendees: [],
       sessions: [],
       archivedSessions: [],

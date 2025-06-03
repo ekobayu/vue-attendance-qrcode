@@ -96,6 +96,7 @@
 import QrcodeVue from 'qrcode.vue'
 import { db } from '../firebase/config'
 import { ref as dbRef, set, onValue, remove, get } from 'firebase/database'
+import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'QRCodeGenerator',
@@ -107,7 +108,7 @@ export default {
       sessionType: 'office',
       startTime: '07:30',
       endTime: '16:30',
-      sessionDate: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+      sessionDate: getTodayDateString(), // Today's date in YYYY-MM-DD format
       autoReset: true,
       qrValue: '',
       sessionId: '',
@@ -232,6 +233,10 @@ export default {
           this.activeSession = data
           this.sessionId = data.sessionId
 
+          // Log the active session date for debugging
+          console.log('Active session date:', data.date)
+          console.log("Today's date:", getTodayDateString())
+
           // Generate QR code
           this.qrValue = JSON.stringify({
             type: 'attendance-session',
@@ -274,31 +279,8 @@ export default {
         const now = Date.now()
 
         // Get today's date in YYYY-MM-DD format - ALWAYS use current date
-        const today = new Date().toISOString().split('T')[0]
+        const today = getTodayDateString()
         console.log(`Using current date for new session: ${today}`)
-
-        // // Check if today is a weekend
-        // if (this.isWeekend(today)) {
-        //   console.log('Auto-reset skipped: Today is a weekend')
-
-        //   // Calculate next reset time for Monday
-        //   const nextMonday = new Date()
-        //   // Add days until we reach Monday (1 = Monday, 0 = Sunday)
-        //   const daysUntilMonday = nextMonday.getDay() === 0 ? 1 : nextMonday.getDay() === 6 ? 2 : 1
-        //   nextMonday.setDate(nextMonday.getDate() + daysUntilMonday)
-        //   nextMonday.setHours(7, 30, 0, 0) // Set to 7:30 AM on Monday
-
-        //   // console.log('Next reset scheduled for Monday:', nextMonday.toString())
-
-        //   // Update active session with new reset time
-        //   const activeSessionRef = dbRef(db, 'active-session')
-        //   await set(activeSessionRef, {
-        //     ...currentSession,
-        //     nextResetTime: nextMonday.getTime()
-        //   })
-
-        //   return false // Exit early, don't create a new session
-        // }
 
         // Create a new session ID
         const newSessionId = 'session-' + now.toString()
@@ -318,26 +300,24 @@ export default {
         }
 
         const nextResetTime = tomorrow.getTime()
-        // console.log('Next reset time set to:', tomorrow.toString())
 
         // Create new session data with today's date - always office session
         const newSessionData = {
           date: today, // ALWAYS use current date
-          startTime: this.calculateSessionStartTime('office', today), // Changed from 'morning' to 'office'
-          endTime: this.calculateSessionEndTime('office', today), // Changed from 'morning' to 'office'
+          startTime: this.calculateSessionStartTime('office', today),
+          endTime: this.calculateSessionEndTime('office', today),
           createdAt: now,
-          type: 'office', // Changed from 'morning' to 'office'
+          type: 'office',
           autoReset: true,
           nextResetTime: nextResetTime
         }
 
-        // console.log('Creating new office session with data:', {
-        //   // Updated log message
-        //   date: newSessionData.date,
-        //   startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
-        //   endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
-        //   nextResetTime: new Date(nextResetTime).toString()
-        // })
+        console.log('Creating new office session with data:', {
+          date: newSessionData.date,
+          startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
+          endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
+          nextResetTime: new Date(nextResetTime).toString()
+        })
 
         // First archive the old session
         const archiveRef = dbRef(db, `archived-sessions/${oldSessionId}`)
@@ -345,12 +325,12 @@ export default {
           ...currentSession,
           archivedAt: now
         })
-        // console.log('Old session archived successfully')
+        console.log('Old session archived successfully')
 
         // Then save new session
         const sessionRef = dbRef(db, `attendance-sessions/${newSessionId}`)
         await set(sessionRef, newSessionData)
-        // console.log('New session created successfully')
+        console.log('New session created successfully')
 
         // Finally update active session
         const activeSessionRef = dbRef(db, 'active-session')
@@ -358,9 +338,9 @@ export default {
           ...newSessionData,
           sessionId: newSessionId
         })
-        // console.log('Active session updated successfully')
+        console.log('Active session updated successfully')
 
-        // console.log('QR code auto-reset complete with new morning session')
+        console.log('QR code auto-reset complete with new office session')
         return true // Return true to indicate successful reset
       } catch (error) {
         console.error('Error during auto-reset:', error)
@@ -369,10 +349,18 @@ export default {
     },
 
     calculateSessionStartTime(sessionType, dateString) {
-      const selectedDate = new Date(dateString)
+      // Create a fresh Date object from the dateString
+      const selectedDate = new Date()
+
+      // If dateString is provided and valid, use it
+      if (dateString) {
+        const parts = dateString.split('-')
+        if (parts.length === 3) {
+          selectedDate.setFullYear(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        }
+      }
 
       if (sessionType === 'office') {
-        // Changed from 'morning' to 'office'
         // 7:30 AM
         selectedDate.setHours(7, 30, 0, 0)
         return selectedDate.getTime()
@@ -389,10 +377,18 @@ export default {
     },
 
     calculateSessionEndTime(sessionType, dateString) {
-      const selectedDate = new Date(dateString)
+      // Create a fresh Date object from the dateString
+      const selectedDate = new Date()
+
+      // If dateString is provided and valid, use it
+      if (dateString) {
+        const parts = dateString.split('-')
+        if (parts.length === 3) {
+          selectedDate.setFullYear(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        }
+      }
 
       if (sessionType === 'office') {
-        // Changed from 'morning' to 'office'
         // 4:30 PM
         selectedDate.setHours(16, 30, 0, 0)
         return selectedDate.getTime()
@@ -509,16 +505,15 @@ export default {
       this.loading = true
 
       try {
-        // Always use current date
-        const today = new Date().toISOString().split('T')[0]
-        // console.log(`Using current date for new session: ${today}`)
+        // Always use current date - get fresh date each time
+        const today = getTodayDateString()
+        console.log(`Using current date for new session: ${today}`)
 
         // Calculate start and end times based on session type
-        const selectedDate = new Date(today) // Use today instead of this.sessionDate
+        const selectedDate = new Date() // Use a fresh Date object
         let startDateTime, endDateTime
 
         if (this.sessionType === 'office') {
-          // Changed from 'morning' to 'office'
           // 7:30 AM - 4:30 PM (9 hours)
           startDateTime = new Date(selectedDate)
           startDateTime.setHours(7, 30, 0, 0)
@@ -558,7 +553,7 @@ export default {
 
         // Create attendance session in Firebase
         const sessionData = {
-          date: today, // Use today instead of this.sessionDate
+          date: today,
           startTime: startDateTime.getTime(),
           endTime: endDateTime.getTime(),
           createdAt: Date.now(),
@@ -567,12 +562,12 @@ export default {
           nextResetTime: this.autoReset ? nextResetTime : null
         }
 
-        // console.log('Creating new session with data:', {
-        //   date: sessionData.date,
-        //   type: this.sessionType,
-        //   startTime: new Date(sessionData.startTime).toLocaleTimeString(),
-        //   endTime: new Date(sessionData.endTime).toLocaleTimeString()
-        // })
+        console.log('Creating new session with data:', {
+          date: sessionData.date,
+          type: this.sessionType,
+          startTime: new Date(sessionData.startTime).toLocaleTimeString(),
+          endTime: new Date(sessionData.endTime).toLocaleTimeString()
+        })
 
         // Save session data
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
@@ -603,7 +598,7 @@ export default {
         this.sessionId = 'session-' + Date.now().toString()
 
         // Get today's date in YYYY-MM-DD format - ALWAYS use current date
-        const today = new Date().toISOString().split('T')[0]
+        const today = getTodayDateString()
         // console.log(`Using current date for refreshed session: ${today}`)
 
         // Check if today is a weekend
@@ -730,7 +725,7 @@ export default {
         return
       }
 
-      const today = new Date().toISOString().split('T')[0]
+      const today = getTodayDateString()
       const currentSessionDate = this.activeSession.date
 
       let confirmMessage = 'Are you sure you want to reset the session?\n\n'

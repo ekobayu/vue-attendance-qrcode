@@ -50,6 +50,7 @@ import AttendanceList from '../components/AttendanceList.vue'
 import UserManagement from '../components/UserManagement.vue'
 import AutoResetSettings from '../components/AutoResetSettings.vue'
 import RemoteWorkSettings from '../components/RemoteWorkSettings.vue'
+import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'AdminPage',
@@ -185,7 +186,7 @@ export default {
 
     loadStats() {
       // Get today's date in YYYY-MM-DD format
-      const today = new Date().toISOString().split('T')[0]
+      const today = getTodayDateString()
 
       // Get today's attendance count
       const todayAttendanceRef = dbRef(db, `daily-attendance/${today}`)

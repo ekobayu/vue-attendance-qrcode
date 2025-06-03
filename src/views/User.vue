@@ -183,6 +183,7 @@ import { onAuthStateChanged } from 'firebase/auth'
 import { ref as dbRef, get } from 'firebase/database'
 import QRCodeScanner from '../components/QRCodeScanner.vue'
 import AttendanceChart from '../components/AttendanceChart.vue'
+import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'UserPage',
@@ -635,7 +636,7 @@ export default {
     hasMarkedAttendanceToday() {
       if (!this.attendanceHistory.length) return false
 
-      const today = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+      const today = getTodayDateString() // YYYY-MM-DD format
       return this.attendanceHistory.some((record) => record.date === today)
     },
 

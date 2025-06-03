@@ -127,6 +127,7 @@
 import { auth, db } from '../firebase/config'
 import { onAuthStateChanged } from 'firebase/auth'
 import { ref as dbRef, set, get, push, onValue } from 'firebase/database'
+import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'RemoteAttendance',
@@ -375,7 +376,7 @@ export default {
     async checkAttendanceStatus() {
       if (!this.user) return
 
-      const today = new Date().toISOString().split('T')[0]
+      const today = getTodayDateString()
       const userAttendanceRef = dbRef(db, `user-attendance/${this.user.uid}/${today}`)
 
       onValue(userAttendanceRef, (snapshot) => {
