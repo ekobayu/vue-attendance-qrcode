@@ -67,15 +67,21 @@
       <!-- Mark Attendance Tab -->
       <div v-if="activeTab === 'mark'" class="tab-content">
         <div class="attendance-options">
-          <div class="option-card">
+          <!-- Office Attendance Card -->
+          <div class="option-card" :class="{ disabled: scanCount >= 2 }">
             <h3>Office Attendance</h3>
             <p>Scan the attendance QR code displayed in office to mark your attendance.</p>
-            <div class="attendance-card">
+            <div class="attendance-card" v-if="scanCount < 2">
               <QRCodeScanner />
+            </div>
+            <div class="limit-message" v-else>
+              <p>You have reached your daily scan limit (2 scans).</p>
+              <p>You can mark attendance again tomorrow.</p>
             </div>
           </div>
 
-          <div class="option-card remote" v-if="isRemoteWorkEnabled">
+          <!-- Remote Work Attendance Card -->
+          <div class="option-card remote" v-if="isRemoteWorkEnabled && scanCount < 2">
             <h3>Remote Work Attendance</h3>
             <p>Working from home or another location? Mark your attendance remotely.</p>
             <router-link to="/remote-attendance" class="remote-btn">Mark Remote Attendance</router-link>
@@ -297,6 +303,11 @@ export default {
       ) {
         // User has specific permission to work remotely regardless of other restrictions
         return true
+      }
+
+      // Check if daily scan limit is reached
+      if (this.scanCount >= 2) {
+        return false // Daily scan limit reached, disable remote work
       }
 
       // Get current day and time
@@ -657,6 +668,11 @@ export default {
 
     getRemoteWorkUnavailableReason() {
       if (!this.remoteWorkLoaded || !this.remoteWorkSettings) return 'while settings are loading...'
+
+      // Check if daily scan limit is reached
+      if (this.scanCount >= 2) {
+        return 'as you have reached your daily scan limit (2 scans).'
+      }
 
       // If user-specific permissions are enabled, check if this user is not in the allowed list
       if (
