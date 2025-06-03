@@ -17,6 +17,43 @@
         </p>
       </div>
 
+      <div class="scan-status">
+        <h3>Today's Attendance Status</h3>
+        <div v-if="loading" class="loading">Loading...</div>
+        <div v-else>
+          <div class="status-card">
+            <div class="scan-item">
+              <div class="scan-label">First Scan:</div>
+              <div v-if="todayAttendance && todayAttendance.firstScan" class="scan-time">
+                {{ formatTime(todayAttendance.firstScan) }}
+                <span class="scan-badge success">Recorded</span>
+              </div>
+              <div v-else class="scan-time">
+                Not recorded
+                <span class="scan-badge pending">Pending</span>
+              </div>
+            </div>
+
+            <div class="scan-item">
+              <div class="scan-label">Second Scan:</div>
+              <div v-if="todayAttendance && todayAttendance.secondScan" class="scan-time">
+                {{ formatTime(todayAttendance.secondScan) }}
+                <span class="scan-badge success">Recorded</span>
+              </div>
+              <div v-else class="scan-time">
+                Not recorded
+                <span class="scan-badge pending">Pending</span>
+              </div>
+            </div>
+
+            <div class="scan-limit-info">
+              <span v-if="scanCount >= 2" class="limit-reached">Daily scan limit reached</span>
+              <span v-else>{{ 2 - scanCount }} scans remaining today</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Tabs Navigation -->
       <div class="tabs">
         <button @click="switchTab('mark')" :class="{ active: activeTab === 'mark' }" class="tab-btn">
@@ -157,10 +194,16 @@
                   <div class="date">{{ formatDateShort(record.date) }}</div>
                 </div>
                 <div class="record-details">
-                  <div class="timestamp">{{ formatTime(record.timestamp) }}</div>
-                  <!-- <div class="session-type" v-if="record.sessionType">
-                    {{ getSessionTypeDisplay(record.sessionType) }}
-                  </div> -->
+                  <div class="scan-times">
+                    <div class="scan-time" v-if="record.firstScan">
+                      <span class="scan-label">In:</span>
+                      {{ formatTime(record.firstScan) }}
+                    </div>
+                    <div class="scan-time" v-if="record.secondScan">
+                      <span class="scan-label">Out:</span>
+                      {{ formatTime(record.secondScan) }}
+                    </div>
+                  </div>
                   <div class="badge" :class="record.remote ? 'remote-badge' : 'in-person-badge'">
                     {{ record.remote ? 'Remote' : 'Office' }}
                   </div>
@@ -212,9 +255,14 @@ export default {
         { label: 'Weekly', value: 'weekly' },
         { label: 'Distribution', value: 'distribution' },
         { label: 'Streak', value: 'streak' }
-      ]
+      ],
+      todayAttendance: null,
+      scanCount: 0
       // currentStreak: 0
     }
+  },
+  mounted() {
+    this.loadTodayAttendance()
   },
   computed: {
     recentAttendance() {
@@ -362,6 +410,60 @@ export default {
       this.activeTab = tabName
     },
 
+    async loadTodayAttendance() {
+      this.loading = true
+      try {
+        const user = auth.currentUser
+        if (!user) return
+
+        const today = getTodayDateString()
+        const attendanceRef = dbRef(db, `user-attendance/${user.uid}/${today}`)
+        const snapshot = await get(attendanceRef)
+
+        if (snapshot.exists()) {
+          const data = snapshot.val()
+
+          // Check if it's the new format (object with multiple records) or old format
+          if (typeof data === 'object' && !Array.isArray(data) && data.timestamp === undefined) {
+            // New format - it's an object with multiple records
+            // Get all timestamps and sort them chronologically (earliest first)
+            const timestamps = Object.keys(data)
+              .map((key) => parseInt(key))
+              .sort((a, b) => a - b)
+
+            if (timestamps.length > 0) {
+              this.todayAttendance = {
+                firstScan: timestamps[0],
+                secondScan: timestamps.length > 1 ? timestamps[1] : null
+              }
+
+              // Update scan count based on actual timestamps
+              this.scanCount = Math.min(timestamps.length, 2)
+            } else {
+              this.todayAttendance = null
+              this.scanCount = 0
+            }
+          } else {
+            // Old format - single record
+            this.todayAttendance = {
+              firstScan: data.timestamp || null,
+              secondScan: null
+            }
+            this.scanCount = data.timestamp ? 1 : 0
+          }
+        } else {
+          this.todayAttendance = null
+          this.scanCount = 0
+        }
+      } catch (error) {
+        console.error("Error loading today's attendance:", error)
+        this.todayAttendance = null
+        this.scanCount = 0
+      } finally {
+        this.loading = false
+      }
+    },
+
     async loadAttendanceHistory(isRefresh = false) {
       if (!this.user) return
 
@@ -370,7 +472,6 @@ export default {
         this.loading = true
       } else {
         // For refreshes, we can use a less intrusive loading state
-        // or show a small indicator that data is being refreshed
         this.refreshing = true
       }
 
@@ -384,13 +485,41 @@ export default {
 
           // Convert object to array with date as a property
           for (const date in attendanceData) {
-            history.push({
-              date: date,
-              timestamp: attendanceData[date].timestamp,
-              remote: attendanceData[date].remote || false,
-              location: attendanceData[date].location || '',
-              sessionType: attendanceData[date].sessionType || ''
-            })
+            const dateData = attendanceData[date]
+
+            // Check if it's the new format (object with multiple records) or old format
+            if (typeof dateData === 'object' && !Array.isArray(dateData) && dateData.timestamp === undefined) {
+              // New format - it's an object with multiple records
+              // Get the latest record for this date
+              const timestamps = Object.keys(dateData)
+                .map(Number)
+                .sort((a, b) => b - a)
+              if (timestamps.length > 0) {
+                const latestTimestamp = timestamps[0]
+                const record = dateData[latestTimestamp]
+
+                history.push({
+                  date: date, // Use the date key as the date property
+                  timestamp: latestTimestamp,
+                  remote: record.remote || false,
+                  location: record.location || '',
+                  sessionType: record.sessionType || '',
+                  firstScan: timestamps[0],
+                  secondScan: timestamps.length > 1 ? timestamps[1] : null
+                })
+              }
+            } else {
+              // Old format - single record
+              history.push({
+                date: date,
+                timestamp: dateData.timestamp,
+                remote: dateData.remote || false,
+                location: dateData.location || '',
+                sessionType: dateData.sessionType || '',
+                firstScan: dateData.timestamp,
+                secondScan: null
+              })
+            }
           }
 
           // Sort by date (newest first)
@@ -1254,5 +1383,70 @@ export default {
     flex-direction: column;
     gap: 10px;
   }
+}
+
+.scan-status {
+  margin-top: 20px;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.status-card {
+  background-color: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.scan-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.scan-item:last-child {
+  border-bottom: none;
+}
+
+.scan-label {
+  font-weight: bold;
+  color: #333;
+}
+
+.scan-time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scan-badge {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.scan-badge.success {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.scan-badge.pending {
+  background-color: #fff8e1;
+  color: #ffa000;
+}
+
+.scan-limit-info {
+  margin-top: 15px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.limit-reached {
+  color: #f44336;
+  font-weight: bold;
 }
 </style>
