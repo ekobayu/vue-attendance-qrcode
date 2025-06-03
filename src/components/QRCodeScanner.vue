@@ -58,6 +58,7 @@
       <p>Date: {{ formatDate(markDate) }}</p>
       <p>Time: {{ formatTime(markTime) }}</p>
       <p>Session: {{ sessionType }}</p>
+
       <button v-if="scanCount < 2" @click="resetAttendance" class="reset-btn">Close</button>
       <p v-else class="limit-note">Daily scan limit reached (2/2)</p>
     </div>
@@ -71,7 +72,7 @@
 <script>
 import { QrcodeStream } from 'qrcode-reader-vue3'
 import { auth, db } from '../firebase/config'
-import { ref as dbRef, set, get } from 'firebase/database'
+import { ref as dbRef, set, get, push } from 'firebase/database'
 import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
@@ -104,12 +105,36 @@ export default {
       try {
         const snapshot = await get(userAttendanceRef)
         if (snapshot.exists()) {
-          this.todayScans = snapshot.val()
+          const data = snapshot.val()
 
-          // Calculate scan count
-          this.scanCount = 0
-          if (this.todayScans.firstScan) this.scanCount++
-          if (this.todayScans.secondScan) this.scanCount++
+          // Check if it's the new format (object with multiple records) or old format
+          if (typeof data === 'object' && !Array.isArray(data) && data.timestamp === undefined) {
+            // New format - it's an object with multiple records
+            // Get all timestamps and sort them chronologically (earliest first)
+            const timestamps = Object.keys(data)
+              .map((key) => parseInt(key))
+              .sort((a, b) => a - b)
+
+            if (timestamps.length > 0) {
+              this.todayScans = {
+                firstScan: timestamps[0],
+                secondScan: timestamps.length > 1 ? timestamps[1] : null
+              }
+
+              // Update scan count based on actual timestamps
+              this.scanCount = Math.min(timestamps.length, 2)
+            } else {
+              this.todayScans = null
+              this.scanCount = 0
+            }
+          } else {
+            // Old format - single record
+            this.todayScans = {
+              firstScan: data.timestamp || null,
+              secondScan: null
+            }
+            this.scanCount = data.timestamp ? 1 : 0
+          }
         } else {
           this.todayScans = null
           this.scanCount = 0
@@ -174,12 +199,30 @@ export default {
     },
 
     async markAttendance(qrData) {
+      // Check if user is logged in
       if (!auth.currentUser) {
         this.error = 'You must be logged in to mark attendance'
         return
       }
 
       try {
+        // Validate QR data
+        if (!qrData || !qrData.sessionId) {
+          this.error = 'Invalid QR code data'
+          return
+        }
+
+        // Double-check that user is still logged in
+        const user = auth.currentUser
+        if (!user) {
+          this.error = 'User authentication lost. Please log in again.'
+          return
+        }
+
+        // Initialize user variables
+        const userId = user.uid
+        const userEmail = user.email
+
         // Check if session exists
         const sessionRef = dbRef(db, `attendance-sessions/${qrData.sessionId}`)
         const snapshot = await get(sessionRef)
@@ -189,7 +232,10 @@ export default {
           return
         }
 
+        // Initialize session variables
+        const today = getTodayDateString()
         const sessionData = snapshot.val()
+        const sessionId = qrData.sessionId
         const now = Date.now()
 
         // Check if the current time is within the valid time range
@@ -216,76 +262,86 @@ export default {
           this.sessionType = 'Custom Session'
         }
 
-        const userId = auth.currentUser.uid
-        const userEmail = auth.currentUser.email
-        const today = getTodayDateString()
-
-        // Check if user has already scanned today
+        // Check if user already has attendance records for today
         const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${today}`)
         const userAttendanceSnapshot = await get(userAttendanceRef)
 
-        let attendanceData = {
-          timestamp: now, // For backward compatibility
-          sessionId: qrData.sessionId,
-          sessionType: sessionData.type
+        // Create the new attendance record with careful validation
+        const newAttendanceRecord = {
+          timestamp: now,
+          sessionId: sessionId,
+          sessionType: sessionData.type || 'office',
+          remote: false // This is office attendance
         }
+
+        console.log('New attendance record:', newAttendanceRecord)
 
         if (userAttendanceSnapshot.exists()) {
           const existingData = userAttendanceSnapshot.val()
 
-          // Update attendance data with existing fields
-          attendanceData = {
-            ...existingData,
-            ...attendanceData
-          }
-
-          // Check scan count
-          let localScanCount = 0
-          if (existingData.firstScan) localScanCount++
-          if (existingData.secondScan) localScanCount++
-
-          if (localScanCount >= 2) {
-            this.error = 'You have already scanned twice today'
-            return
-          }
-
-          // Record appropriate scan
-          if (localScanCount === 0) {
-            attendanceData.firstScan = now
-            this.scanCount = 1
+          // Check if it's the new multi-record format
+          if (
+            typeof existingData === 'object' &&
+            !Array.isArray(existingData) &&
+            existingData.timestamp === undefined
+          ) {
+            // It's the new format - add a new record with the current timestamp
+            console.log('Adding to existing multi-record format')
+            await set(dbRef(db, `user-attendance/${userId}/${today}/${now}`), newAttendanceRecord)
           } else {
-            attendanceData.secondScan = now
-            this.scanCount = 2
+            // It's the old format - migrate to new format
+            console.log('Migrating from old format to multi-record format')
+            const oldTimestamp = existingData.timestamp || now - 1000 // Fallback if timestamp is missing
+
+            // Create a new structure with both records
+            const newStructure = {}
+            newStructure[oldTimestamp] = {
+              ...existingData,
+              timestamp: oldTimestamp,
+              sessionId: existingData.sessionId || 'unknown',
+              sessionType: existingData.sessionType || 'unknown'
+            }
+            newStructure[now] = newAttendanceRecord
+
+            // Replace the old record with the new structure
+            await set(userAttendanceRef, newStructure)
           }
         } else {
-          // First scan of the day
-          attendanceData.firstScan = now
-          this.scanCount = 1
+          // No existing record - create a new one with the timestamp as the key
+          console.log('Creating new attendance record')
+          const newStructure = {}
+          newStructure[now] = newAttendanceRecord
+
+          await set(userAttendanceRef, newStructure)
         }
 
-        // Update user's attendance record
-        await set(userAttendanceRef, attendanceData)
-
-        // Update daily attendance record
-        const dailyAttendanceRef = dbRef(db, `daily-attendance/${today}/${userId}`)
-        await set(dailyAttendanceRef, {
-          ...attendanceData,
-          email: userEmail
+        // Update the session's attendees list
+        const attendeeRef = dbRef(db, `attendance-sessions/${sessionId}/attendees/${userId}_${now}`)
+        await set(attendeeRef, {
+          email: userEmail,
+          userId: userId,
+          timestamp: now,
+          remote: false
         })
 
-        // Update session attendees
-        const sessionAttendeeRef = dbRef(db, `attendance-sessions/${qrData.sessionId}/attendees/${userId}`)
-        await set(sessionAttendeeRef, {
+        // Save to daily attendance records
+        const dailyAttendanceRef = dbRef(db, `daily-attendance/${today}`)
+        const newAttendanceRef = push(dailyAttendanceRef)
+
+        await set(newAttendanceRef, {
+          userId: userId,
           email: userEmail,
           timestamp: now,
-          firstScan: attendanceData.firstScan,
-          secondScan: attendanceData.secondScan || null
+          sessionId: sessionId,
+          sessionType: sessionData.type || 'office',
+          remote: false
         })
 
-        this.attendanceMarked = true
-
-        // Refresh today's scans
+        // Update scan count and today's scans
         await this.checkTodayScans()
+
+        // Set attendance marked to show success screen
+        this.attendanceMarked = true
       } catch (error) {
         console.error('Error marking attendance:', error)
         this.error = 'Failed to mark attendance: ' + error.message
@@ -324,9 +380,6 @@ export default {
 
     resetAttendance() {
       this.attendanceMarked = false
-      this.markTime = null
-      this.markDate = null
-      this.sessionType = ''
       this.error = null
     },
 
@@ -359,6 +412,12 @@ export default {
   background-color: #f5f5f5;
   border-radius: 8px;
   border-left: 4px solid #4caf50;
+}
+
+.success-status {
+  margin-top: 20px;
+  border-left: 4px solid #2196f3;
+  background-color: #e3f2fd;
 }
 
 .scan-status-display h3 {
