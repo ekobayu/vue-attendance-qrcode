@@ -269,6 +269,7 @@
                   <div class="session-actions">
                     <button @click="viewSessionDetails(session)" class="view-btn">View Details</button>
                     <button @click="restoreSession(session)" class="restore-btn">Restore</button>
+                    <button @click="deleteArchivedSession(session)" class="delete-btn-session">Delete</button>
                   </div>
                 </div>
               </div>
@@ -623,10 +624,18 @@ export default {
         const data = snapshot.val()
         if (data) {
           this.sessions = Object.keys(data)
-            .map((key) => ({
-              id: key,
-              ...data[key]
-            }))
+            .map((key) => {
+              // Log the attendees data for debugging
+              console.log(
+                `Session ${key} attendees:`,
+                data[key].attendees ? Object.keys(data[key].attendees).length : 'No attendees'
+              )
+
+              return {
+                id: key,
+                ...data[key]
+              }
+            })
             .sort((a, b) => new Date(b.date) - new Date(a.date) || b.startTime - a.startTime)
           this.filterSessions()
         } else {
@@ -996,9 +1005,22 @@ export default {
     },
 
     getAttendeeCount(session) {
-      if (session.attendees) {
+      // Check if attendees property exists
+      if (!session.attendees) {
+        return 0
+      }
+
+      // If attendees is an object, count its keys
+      if (typeof session.attendees === 'object' && !Array.isArray(session.attendees)) {
         return Object.keys(session.attendees).length
       }
+
+      // If attendees is an array, return its length
+      if (Array.isArray(session.attendees)) {
+        return session.attendees.length
+      }
+
+      // Default case
       return 0
     },
 
@@ -1080,6 +1102,17 @@ export default {
       this.showConfirmModal = true
     },
 
+    deleteArchivedSession(session) {
+      this.confirmModalTitle = 'Delete Archived Session'
+      this.confirmModalMessage = `Are you sure you want to permanently delete the archived session from ${this.formatDate(
+        session.date
+      )}? This action cannot be undone.`
+      this.confirmButtonText = 'Delete'
+      this.pendingAction = 'deleteArchived'
+      this.pendingActionData = session
+      this.showConfirmModal = true
+    },
+
     async confirmAction() {
       if (this.pendingAction === 'archive') {
         await this.performArchiveSession(this.pendingActionData)
@@ -1089,6 +1122,8 @@ export default {
         await this.deleteAttendanceRecord(this.pendingActionData)
       } else if (this.pendingAction === 'removeFromSession') {
         await this.removeAttendeeFromSession(this.pendingActionData)
+      } else if (this.pendingAction === 'deleteArchived') {
+        await this.performDeleteArchivedSession(this.pendingActionData)
       }
 
       this.showConfirmModal = false
@@ -1146,6 +1181,41 @@ export default {
       } catch (error) {
         console.error('Error restoring session:', error)
         alert('Failed to restore session: ' + error.message)
+      }
+    },
+
+    async performDeleteArchivedSession(session) {
+      const toast = useToast()
+      try {
+        if (!session || !session.id) {
+          throw new Error('Invalid session data')
+        }
+
+        // Reference to the archived session
+        const archivedRef = dbRef(db, `archived-sessions/${session.id}`)
+
+        // Delete the archived session
+        await remove(archivedRef)
+
+        // Show success message
+        toast.success(`Session from ${this.formatDate(session.date)} has been permanently deleted.`, {
+          position: 'top-center',
+          duration: 3000
+        })
+
+        // Refresh archived sessions list
+        this.loadArchivedSessions()
+
+        // If the deleted session was being viewed in the modal, close it
+        if (this.selectedSession && this.selectedSession.id === session.id) {
+          this.closeSessionDetails()
+        }
+      } catch (error) {
+        console.error('Error deleting archived session:', error)
+        toast.error(`Failed to delete session: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
       }
     },
 
@@ -1611,6 +1681,37 @@ tr:nth-child(even) {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.delete-btn-session {
+  background-color: #f44336;
+  padding: 8px 15px;
+  font-size: 14px;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.delete-btn-session:hover {
+  background-color: #d32f2f;
+}
+
+/* For mobile responsiveness */
+@media (max-width: 768px) {
+  .session-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .view-btn,
+  .restore-btn,
+  .delete-btn-session {
+    flex: 1;
+    min-width: 80px;
+    text-align: center;
+  }
 }
 
 .month-group {
