@@ -142,12 +142,12 @@
           <button @click="clearSessionFilter" class="clear-filter" v-if="sessionDateFilter">Clear</button>
         </div>
 
-        <div class="search-box">
+        <!-- <div class="search-box">
           <input type="text" v-model="sessionSearchQuery" placeholder="Search sessions..." @input="filterSessions" />
           <button @click="sessionSearchQuery = '' && filterSessions()" class="clear-search" v-if="sessionSearchQuery">
             ✕
           </button>
-        </div>
+        </div> -->
       </div>
 
       <div class="session-list">
@@ -208,7 +208,7 @@
           <button @click="clearArchivedFilter" class="clear-filter" v-if="archivedDateFilter">Clear</button>
         </div>
 
-        <div class="search-box">
+        <!-- <div class="search-box">
           <input
             type="text"
             v-model="archivedSearchQuery"
@@ -222,7 +222,7 @@
           >
             ✕
           </button>
-        </div>
+        </div> -->
       </div>
 
       <div class="session-list">
@@ -233,6 +233,34 @@
         </div>
 
         <div v-else>
+          <!-- Add this above the archived sessions list -->
+          <div class="batch-actions" v-if="filteredArchivedSessions.length > 0">
+            <div class="selection-info" v-if="selectedArchivedSessions.length > 0">
+              {{ selectedArchivedSessions.length }} sessions selected
+            </div>
+            <button
+              @click="selectAllArchivedSessions"
+              class="select-all-btn"
+              v-if="selectedArchivedSessions.length < filteredArchivedSessions.length"
+            >
+              Select All
+            </button>
+            <button
+              @click="clearArchivedSelection"
+              class="clear-selection-btn"
+              v-else-if="selectedArchivedSessions.length > 0"
+            >
+              Clear Selection
+            </button>
+            <button
+              @click="batchDeleteArchivedSessions"
+              class="batch-delete-btn"
+              v-if="selectedArchivedSessions.length > 0"
+            >
+              Delete Selected
+            </button>
+          </div>
+
           <!-- Loop through each month group -->
           <div v-for="(sessions, month) in groupedArchivedSessions" :key="month" class="month-group">
             <div class="month-header" @click="toggleMonthExpand(month)">
@@ -248,6 +276,9 @@
               <!-- Loop through sessions in this month -->
               <div v-for="session in sessions" :key="session.id" class="session-item archived">
                 <div class="session-header">
+                  <div class="session-select">
+                    <input type="checkbox" :value="session.id" v-model="selectedArchivedSessions" />
+                  </div>
                   <div class="session-date">{{ formatDate(session.date) }}</div>
                   <div class="session-time">
                     {{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}
@@ -451,7 +482,9 @@ export default {
       confirmModalMessage: '',
       confirmButtonText: 'Confirm',
       pendingAction: null,
-      pendingActionData: null
+      pendingActionData: null,
+
+      selectedArchivedSessions: []
     }
   },
   computed: {
@@ -818,7 +851,11 @@ export default {
         )
       }
 
+      // Reset selection when filter changes
+      this.selectedArchivedSessions = []
+
       // Group by month
+      this.filteredArchivedSessions = filtered
       this.groupedArchivedSessions = this.groupSessionsByMonth(filtered)
 
       // Auto-expand the first month or if there's only one month
@@ -1124,6 +1161,8 @@ export default {
         await this.removeAttendeeFromSession(this.pendingActionData)
       } else if (this.pendingAction === 'deleteArchived') {
         await this.performDeleteArchivedSession(this.pendingActionData)
+      } else if (this.pendingAction === 'batchDeleteArchived') {
+        await this.performBatchDeleteArchivedSessions(this.pendingActionData)
       }
 
       this.showConfirmModal = false
@@ -1213,6 +1252,62 @@ export default {
       } catch (error) {
         console.error('Error deleting archived session:', error)
         toast.error(`Failed to delete session: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
+      }
+    },
+
+    selectAllArchivedSessions() {
+      this.selectedArchivedSessions = this.filteredArchivedSessions.map((session) => session.id)
+    },
+
+    clearArchivedSelection() {
+      this.selectedArchivedSessions = []
+    },
+
+    batchDeleteArchivedSessions() {
+      const count = this.selectedArchivedSessions.length
+      this.confirmModalTitle = 'Delete Selected Sessions'
+      this.confirmModalMessage = `Are you sure you want to permanently delete ${count} selected archived session(s)? This action cannot be undone.`
+      this.confirmButtonText = 'Delete All Selected'
+      this.pendingAction = 'batchDeleteArchived'
+      this.pendingActionData = [...this.selectedArchivedSessions] // Create a copy of the array
+      this.showConfirmModal = true
+    },
+
+    async performBatchDeleteArchivedSessions(sessionIds) {
+      const toast = useToast()
+      try {
+        if (!sessionIds || !sessionIds.length) {
+          throw new Error('No sessions selected for deletion')
+        }
+
+        // Delete each session one by one
+        for (const sessionId of sessionIds) {
+          const archivedRef = dbRef(db, `archived-sessions/${sessionId}`)
+          await remove(archivedRef)
+        }
+
+        // Show success message
+        toast.success(`${sessionIds.length} archived sessions have been permanently deleted.`, {
+          position: 'top-center',
+          duration: 3000
+        })
+
+        // Clear selection
+        this.selectedArchivedSessions = []
+
+        // Refresh archived sessions list
+        this.loadArchivedSessions()
+
+        // If a deleted session was being viewed in the modal, close it
+        if (this.selectedSession && sessionIds.includes(this.selectedSession.id)) {
+          this.closeSessionDetails()
+        }
+      } catch (error) {
+        console.error('Error batch deleting archived sessions:', error)
+        toast.error(`Failed to delete sessions: ${error.message}`, {
           position: 'top-center',
           duration: 5000
         })
@@ -2014,5 +2109,51 @@ tr:nth-child(even) {
   border-radius: 12px;
   font-size: 12px;
   font-weight: bold;
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.selection-info {
+  font-weight: bold;
+  color: #555;
+}
+
+.select-all-btn,
+.clear-selection-btn {
+  background-color: #2196f3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.batch-delete-btn {
+  background-color: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.session-select {
+  margin-right: 10px;
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
 }
 </style>
