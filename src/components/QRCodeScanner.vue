@@ -274,7 +274,7 @@ export default {
           remote: false // This is office attendance
         }
 
-        console.log('New attendance record:', newAttendanceRecord)
+        // console.log('New attendance record:', newAttendanceRecord)
 
         if (userAttendanceSnapshot.exists()) {
           const existingData = userAttendanceSnapshot.val()

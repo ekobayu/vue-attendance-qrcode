@@ -171,13 +171,13 @@ export default {
 
         if (snapshot.exists()) {
           const activeSession = snapshot.val()
-          console.log('Found active session:', {
-            id: activeSession.sessionId,
-            date: activeSession.date,
-            type: activeSession.type,
-            autoReset: activeSession.autoReset,
-            nextResetTime: activeSession.nextResetTime ? new Date(activeSession.nextResetTime).toString() : 'not set'
-          })
+          // console.log('Found active session:', {
+          //   id: activeSession.sessionId,
+          //   date: activeSession.date,
+          //   type: activeSession.type,
+          //   autoReset: activeSession.autoReset,
+          //   nextResetTime: activeSession.nextResetTime ? new Date(activeSession.nextResetTime).toString() : 'not set'
+          // })
 
           // Check if auto-reset is enabled and if it's time to reset
           const now = Date.now()
@@ -208,7 +208,7 @@ export default {
             }
 
             const nextResetTime = tomorrow.getTime()
-            console.log('Setting next reset time to:', tomorrow.toString())
+            // console.log('Setting next reset time to:', tomorrow.toString())
 
             // Update the session with the next reset time
             await set(activeSessionRef, {
@@ -236,10 +236,6 @@ export default {
           const data = snapshot.val()
           this.activeSession = data
           this.sessionId = data.sessionId
-
-          // Log the active session date for debugging
-          console.log('Active session date:', data.date)
-          console.log("Today's date:", getTodayDateString())
 
           // Generate QR code with scan limit information
           this.qrValue = JSON.stringify({
@@ -286,7 +282,6 @@ export default {
 
         // Get today's date in YYYY-MM-DD format - ALWAYS use current date
         const today = getTodayDateString()
-        console.log(`Using current date for new session: ${today}`)
 
         // Create a new session ID
         const newSessionId = 'session-' + now.toString()
@@ -320,12 +315,12 @@ export default {
           version: 2 // Add version
         }
 
-        console.log('Creating new office session with data:', {
-          date: newSessionData.date,
-          startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
-          endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
-          nextResetTime: new Date(nextResetTime).toString()
-        })
+        // console.log('Creating new office session with data:', {
+        //   date: newSessionData.date,
+        //   startTime: new Date(newSessionData.startTime).toLocaleTimeString(),
+        //   endTime: new Date(newSessionData.endTime).toLocaleTimeString(),
+        //   nextResetTime: new Date(nextResetTime).toString()
+        // })
 
         // First archive the old session
         const archiveRef = dbRef(db, `archived-sessions/${oldSessionId}`)
@@ -481,7 +476,6 @@ export default {
       try {
         // Always use current date - get fresh date each time
         const today = getTodayDateString()
-        console.log(`Using current date for new session: ${today}`)
 
         // Calculate start and end times based on session type
         const selectedDate = new Date() // Use a fresh Date object
@@ -538,12 +532,12 @@ export default {
           version: 2 // Add version
         }
 
-        console.log('Creating new session with data:', {
-          date: sessionData.date,
-          type: this.sessionType,
-          startTime: new Date(sessionData.startTime).toLocaleTimeString(),
-          endTime: new Date(sessionData.endTime).toLocaleTimeString()
-        })
+        // console.log('Creating new session with data:', {
+        //   date: sessionData.date,
+        //   type: this.sessionType,
+        //   startTime: new Date(sessionData.startTime).toLocaleTimeString(),
+        //   endTime: new Date(sessionData.endTime).toLocaleTimeString()
+        // })
 
         // Save session data
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
