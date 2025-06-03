@@ -17,6 +17,52 @@
         </p>
       </div>
 
+      <!-- Display attendance count -->
+      <div class="attendance-count">
+        <p>You have marked attendance {{ attendanceCount }} / 2 times today</p>
+        <div class="progress-bar">
+          <div class="progress" :style="{ width: (attendanceCount / 2) * 100 + '%' }"></div>
+        </div>
+      </div>
+
+      <!-- Today's Attendance Status -->
+      <div class="scan-status">
+        <h3>Today's Attendance Status</h3>
+        <div v-if="loadingStatus" class="loading">Loading...</div>
+        <div v-else>
+          <div class="status-card">
+            <div class="scan-item">
+              <div class="scan-label">First Scan:</div>
+              <div v-if="todayAttendance && todayAttendance.firstScan" class="scan-time">
+                {{ formatTime(todayAttendance.firstScan) }}
+                <span class="scan-badge success">Recorded</span>
+              </div>
+              <div v-else class="scan-time">
+                Not recorded
+                <span class="scan-badge pending">Pending</span>
+              </div>
+            </div>
+
+            <div class="scan-item">
+              <div class="scan-label">Second Scan:</div>
+              <div v-if="todayAttendance && todayAttendance.secondScan" class="scan-time">
+                {{ formatTime(todayAttendance.secondScan) }}
+                <span class="scan-badge success">Recorded</span>
+              </div>
+              <div v-else class="scan-time">
+                Not recorded
+                <span class="scan-badge pending">Pending</span>
+              </div>
+            </div>
+
+            <div class="scan-limit-info">
+              <span v-if="scanCount >= 2" class="limit-reached">Daily scan limit reached</span>
+              <span v-else>{{ 2 - scanCount }} scans remaining today</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div v-if="activeSession" class="session-info">
         <h3>Active Attendance Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
@@ -30,7 +76,7 @@
         <p>Please try again later or contact your administrator.</p>
       </div>
 
-      <div v-if="activeSession" class="remote-form">
+      <div v-if="activeSession && attendanceCount < 2" class="remote-form">
         <h3>Mark Remote Attendance</h3>
 
         <div class="form-group">
@@ -64,22 +110,6 @@
               Lat: {{ userCoordinates.latitude.toFixed(4) }}, Lng: {{ userCoordinates.longitude.toFixed(4) }}
             </div>
           </div>
-
-          <!-- Common locations dropdown -->
-          <!-- <div class="common-locations">
-            <label class="small-label">Quick select:</label>
-            <div class="location-chips">
-              <button
-                v-for="(loc, index) in commonLocations"
-                :key="index"
-                @click="location = loc"
-                class="location-chip"
-                type="button"
-              >
-                {{ loc }}
-              </button>
-            </div>
-          </div> -->
         </div>
 
         <div class="form-group">
@@ -95,6 +125,14 @@
         <button @click="markRemoteAttendance" :disabled="!location || submitting" class="mark-btn">
           {{ submitting ? 'Submitting...' : 'Mark Attendance' }}
         </button>
+      </div>
+
+      <!-- Show message when attendance limit reached -->
+      <div v-else-if="attendanceCount >= 2" class="limit-reached">
+        <div class="limit-icon">⚠️</div>
+        <h3>Daily Attendance Limit Reached</h3>
+        <p>You have already marked attendance 2 times today.</p>
+        <p>You can mark attendance again tomorrow.</p>
       </div>
     </div>
 
@@ -115,6 +153,9 @@
           <span class="map-icon">🗺️</span> View Location on Google Maps
         </a>
       </div>
+      <br />
+      <!-- Button to mark another attendance if limit not reached -->
+      <button v-if="attendanceCount < 2" @click="resetForm" class="mark-another-btn">Mark Another Attendance</button>
     </div>
 
     <div v-if="error" class="error-message">
@@ -154,7 +195,12 @@ export default {
         longitude: null
       },
       showMapLink: false,
-      mapsUrl: null
+      mapsUrl: null,
+      attendanceCount: 0, // Track how many times attendance has been marked today
+      attendanceRecords: [], // Store attendance records for today
+      todayAttendance: null, // Today's attendance status
+      scanCount: 0, // Number of scans today
+      loadingStatus: false // Loading state for attendance status
     }
   },
   created() {
@@ -165,6 +211,7 @@ export default {
       } else {
         this.checkActiveSession()
         this.checkAttendanceStatus()
+        this.loadTodayAttendance() // Load today's attendance status
       }
     })
   },
@@ -373,6 +420,61 @@ export default {
       })
     },
 
+    async loadTodayAttendance() {
+      if (!this.user) return
+
+      this.loadingStatus = true
+      try {
+        const today = getTodayDateString()
+        const attendanceRef = dbRef(db, `user-attendance/${this.user.uid}/${today}`)
+        const snapshot = await get(attendanceRef)
+
+        if (snapshot.exists()) {
+          const data = snapshot.val()
+
+          // Check if it's the new format (object with multiple records) or old format
+          if (typeof data === 'object' && !Array.isArray(data) && data.timestamp === undefined) {
+            // New format - it's an object with multiple records
+            this.todayAttendance = {
+              firstScan: null,
+              secondScan: null
+            }
+
+            // Find the earliest and second earliest timestamps
+            const timestamps = Object.keys(data)
+              .map((key) => parseInt(key))
+              .sort((a, b) => a - b)
+
+            if (timestamps.length > 0) {
+              this.todayAttendance.firstScan = timestamps[0]
+            }
+
+            if (timestamps.length > 1) {
+              this.todayAttendance.secondScan = timestamps[1]
+            }
+
+            this.scanCount = Math.min(timestamps.length, 2)
+          } else {
+            // Old format - single record
+            this.todayAttendance = {
+              firstScan: data.timestamp || null,
+              secondScan: null
+            }
+            this.scanCount = data.timestamp ? 1 : 0
+          }
+        } else {
+          this.todayAttendance = null
+          this.scanCount = 0
+        }
+      } catch (error) {
+        console.error("Error loading today's attendance:", error)
+        this.todayAttendance = null
+        this.scanCount = 0
+      } finally {
+        this.loadingStatus = false
+      }
+    },
+
     async checkAttendanceStatus() {
       if (!this.user) return
 
@@ -382,34 +484,89 @@ export default {
       onValue(userAttendanceRef, (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val()
-          this.attendanceMarked = true
-          this.markTime = data.timestamp
-          this.markDate = today
-          this.location = data.location || ''
 
-          // Load saved coordinates if available
-          if (data.coordinates) {
-            this.userCoordinates.latitude = data.coordinates.latitude
-            this.userCoordinates.longitude = data.coordinates.longitude
-            this.showMapLink = true
-          }
+          // Check if data is an object with multiple records
+          if (typeof data === 'object' && !Array.isArray(data) && data.timestamp === undefined) {
+            // Count the number of attendance records
+            this.attendanceRecords = Object.values(data)
+            this.attendanceCount = this.attendanceRecords.length
 
-          // Store the maps URL if available
-          if (data.mapsUrl) {
-            this.mapsUrl = data.mapsUrl
-          } else if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
-            // Generate it if we have coordinates but no stored URL
-            this.mapsUrl = this.getGoogleMapsUrl()
-          }
+            // If there are records, set the latest one for display
+            if (this.attendanceCount > 0) {
+              // Sort records by timestamp (newest first)
+              const sortedRecords = [...this.attendanceRecords].sort((a, b) => b.timestamp - a.timestamp)
+              const latestRecord = sortedRecords[0]
 
-          // Get session type
-          if (data.sessionType === 'office') {
-            this.sessionType = 'Office (07:30 AM - 04:30 PM)'
-          } else if (data.sessionType === 'morning') {
-            this.sessionType = 'Morning (08:00 AM - 05:00 PM)'
+              this.markTime = latestRecord.timestamp
+              this.markDate = today
+              this.location = latestRecord.location || ''
+
+              // Load saved coordinates if available
+              if (latestRecord.coordinates) {
+                this.userCoordinates.latitude = latestRecord.coordinates.latitude
+                this.userCoordinates.longitude = latestRecord.coordinates.longitude
+                this.showMapLink = true
+              }
+
+              // Store the maps URL if available
+              if (latestRecord.mapsUrl) {
+                this.mapsUrl = latestRecord.mapsUrl
+              } else if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
+                // Generate it if we have coordinates but no stored URL
+                this.mapsUrl = this.getGoogleMapsUrl()
+              }
+
+              // Get session type
+              if (latestRecord.sessionType === 'office') {
+                this.sessionType = 'Office (07:30 AM - 04:30 PM)'
+              } else if (latestRecord.sessionType === 'morning') {
+                this.sessionType = 'Morning (08:00 AM - 05:00 PM)'
+              } else {
+                this.sessionType = 'Custom Session'
+              }
+            }
           } else {
-            this.sessionType = 'Custom Session'
+            // Legacy format - single record
+            this.attendanceCount = 1
+            this.attendanceRecords = [data]
+
+            this.markTime = data.timestamp
+            this.markDate = today
+            this.location = data.location || ''
+
+            // Load saved coordinates if available
+            if (data.coordinates) {
+              this.userCoordinates.latitude = data.coordinates.latitude
+              this.userCoordinates.longitude = data.coordinates.longitude
+              this.showMapLink = true
+            }
+
+            // Store the maps URL if available
+            if (data.mapsUrl) {
+              this.mapsUrl = data.mapsUrl
+            } else if (this.userCoordinates.latitude && this.userCoordinates.longitude) {
+              // Generate it if we have coordinates but no stored URL
+              this.mapsUrl = this.getGoogleMapsUrl()
+            }
+
+            // Get session type
+            if (data.sessionType === 'office') {
+              this.sessionType = 'Office (07:30 AM - 04:30 PM)'
+            } else if (data.sessionType === 'morning') {
+              this.sessionType = 'Morning (08:00 AM - 05:00 PM)'
+            } else {
+              this.sessionType = 'Custom Session'
+            }
           }
+
+          // Set attendanceMarked to true only if viewing the success screen
+          // We'll reset this when the user wants to mark another attendance
+          this.attendanceMarked = true
+        } else {
+          // No attendance records for today
+          this.attendanceCount = 0
+          this.attendanceRecords = []
+          this.attendanceMarked = false
         }
       })
     },
@@ -425,6 +582,12 @@ export default {
         return
       }
 
+      // Check if attendance limit reached
+      if (this.attendanceCount >= 2) {
+        this.error = 'You have already marked attendance 2 times today'
+        return
+      }
+
       this.submitting = true
       this.error = null
 
@@ -432,16 +595,6 @@ export default {
         const sessionId = this.activeSession.sessionId
         const userId = this.user.uid
         const userEmail = this.user.email
-
-        // Check if user already marked attendance for this session
-        const attendeeRef = dbRef(db, `attendance-sessions/${sessionId}/attendees/${userId}`)
-        const snapshot = await get(attendeeRef)
-
-        if (snapshot.exists()) {
-          this.error = 'You have already marked your attendance for this session'
-          this.submitting = false
-          return
-        }
 
         // Set current time and date
         this.markTime = Date.now()
@@ -478,6 +631,7 @@ export default {
         }
 
         // Mark attendance in session with remote work flag
+        const attendeeRef = dbRef(db, `attendance-sessions/${sessionId}/attendees/${userId}_${this.markTime}`)
         await set(attendeeRef, attendanceData)
 
         // Also save to daily attendance records
@@ -492,7 +646,8 @@ export default {
           sessionType: this.activeSession.type,
           remote: true,
           location: this.location,
-          workSummary: this.workSummary || ''
+          workSummary: this.workSummary || '',
+          date: this.activeSession.date // Add date property
         }
 
         // Add coordinates and maps URL to daily attendance
@@ -507,15 +662,17 @@ export default {
 
         await set(newAttendanceRef, dailyAttendanceData)
 
-        // Also save to user's attendance history
-        const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${this.activeSession.date}`)
+        // Also save to user's attendance history - now using a unique key for each record
+        const today = getTodayDateString()
+        const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${today}/${this.markTime}`)
 
         const userAttendanceData = {
           timestamp: this.markTime,
           recordId: newAttendanceRef.key,
           sessionType: this.activeSession.type,
           remote: true,
-          location: this.location
+          location: this.location,
+          date: today // Add date property to ensure it's available for history display
         }
 
         // Add coordinates and maps URL to user attendance
@@ -530,13 +687,92 @@ export default {
 
         await set(userAttendanceRef, userAttendanceData)
 
+        // Update today's attendance status for the scan count display
+        // Check if we need to update firstScan or secondScan
+        const todayAttendanceRef = dbRef(db, `user-attendance/${userId}/${today}`)
+        const todaySnapshot = await get(todayAttendanceRef)
+
+        if (todaySnapshot.exists()) {
+          const todayData = todaySnapshot.val()
+
+          // If it's the new format with multiple records
+          if (typeof todayData === 'object' && !Array.isArray(todayData) && todayData.timestamp === undefined) {
+            // We've already added the new record, so just update our local state
+            if (!this.todayAttendance) {
+              this.todayAttendance = {
+                firstScan: this.markTime,
+                secondScan: null
+              }
+            } else if (!this.todayAttendance.firstScan) {
+              this.todayAttendance.firstScan = this.markTime
+            } else if (!this.todayAttendance.secondScan) {
+              this.todayAttendance.secondScan = this.markTime
+            }
+          } else {
+            // It's the old format with a single record
+            // We need to migrate to the new format
+            const newTodayData = {
+              [todayData.timestamp]: {
+                ...todayData,
+                date: today // Ensure date is included
+              },
+              [this.markTime]: {
+                ...userAttendanceData,
+                date: today // Ensure date is included
+              }
+            }
+
+            // Update the database with the new format
+            await set(todayAttendanceRef, newTodayData)
+
+            // Update local state
+            this.todayAttendance = {
+              firstScan: todayData.timestamp,
+              secondScan: this.markTime
+            }
+          }
+        } else {
+          // First attendance of the day
+          this.todayAttendance = {
+            firstScan: this.markTime,
+            secondScan: null
+          }
+        }
+
+        // Update scan count
+        this.scanCount = this.todayAttendance.secondScan ? 2 : 1
+
+        // Update attendance count
+        this.attendanceCount++
         this.attendanceMarked = true
+
+        // Refresh the parent component's attendance status if possible
+        if (this.$parent && typeof this.$parent.loadTodayAttendance === 'function') {
+          this.$parent.loadTodayAttendance()
+        } else if (this.$root && typeof this.$root.$emit === 'function') {
+          // Emit an event that can be caught by the parent component
+          this.$root.$emit('attendance-marked')
+        }
       } catch (error) {
         console.error('Error marking remote attendance:', error)
         this.error = 'Failed to mark attendance: ' + error.message
       } finally {
         this.submitting = false
       }
+    },
+
+    // Reset form to mark another attendance
+    resetForm() {
+      this.attendanceMarked = false
+      this.location = ''
+      this.workSummary = ''
+      this.userCoordinates = {
+        latitude: null,
+        longitude: null
+      }
+      this.showMapLink = false
+      this.mapsUrl = null
+      this.locationStatus = ''
     },
 
     getSessionTypeDisplay(type) {
@@ -822,5 +1058,135 @@ textarea {
 .success-map-link {
   display: inline-block;
   margin-top: 15px;
+}
+
+/* New styles for attendance limit feature */
+.attendance-count {
+  background-color: #f5f5f5;
+  padding: 12px 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.progress-bar {
+  height: 10px;
+  background-color: #e0e0e0;
+  border-radius: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.progress {
+  height: 100%;
+  background-color: #4caf50;
+  transition: width 0.3s ease;
+}
+
+.limit-reached {
+  background-color: #fff3e0;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 20px;
+  text-align: center;
+  border-left: 4px solid #ff9800;
+}
+
+.limit-icon {
+  font-size: 36px;
+  margin-bottom: 10px;
+}
+
+.mark-another-btn {
+  background-color: #2196f3;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  margin-top: 20px;
+}
+
+.mark-another-btn:hover {
+  background-color: #0b7dda;
+}
+
+/* Styles for today's attendance status */
+.scan-status {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.scan-status h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.loading {
+  text-align: center;
+  color: #666;
+  padding: 10px;
+}
+
+.status-card {
+  background-color: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.scan-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.scan-item:last-child {
+  border-bottom: none;
+}
+
+.scan-label {
+  font-weight: bold;
+  color: #333;
+}
+
+.scan-time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scan-badge {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.scan-badge.success {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.scan-badge.pending {
+  background-color: #fff8e1;
+  color: #ffa000;
+}
+
+.scan-limit-info {
+  margin-top: 15px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.limit-reached {
+  color: #f44336;
+  font-weight: bold;
 }
 </style>
