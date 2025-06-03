@@ -42,7 +42,6 @@
     </div>
 
     <div v-else class="active-session">
-      <!-- Rest of the template remains the same -->
       <div class="session-info">
         <h3>Active Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
@@ -50,6 +49,10 @@
         <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
         <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p>
         <p><strong>Attendees:</strong> {{ attendeeCount }}</p>
+        <div class="scan-limit-info">
+          <span class="scan-limit-badge">2 Scans Per Day</span><br />
+          <span class="scan-limit-text">First scan: Check-in | Second scan: Check-out</span>
+        </div>
         <p v-if="activeSession.autoReset" class="auto-reset-info">
           <span class="auto-reset-badge">Auto Reset</span>
           QR code will automatically reset every day
@@ -63,13 +66,14 @@
 
         <p class="instructions">
           Employees can scan this QR code to mark their attendance during the valid time period.
+          <br />
+          <strong>Each employee is limited to 2 scans per day (check-in and check-out).</strong>
         </p>
 
         <div class="action-buttons">
           <button @click="printQRCode" class="print-btn">Print QR Code</button>
           <button @click="openInNewTab" class="new-tab-btn">Open in New Tab</button>
           <button @click="refreshQRCode" class="refresh-btn">Refresh QR Code</button>
-          <!-- <button @click="manualReset" class="manual-reset-btn">Manual Reset</button> -->
           <button @click="endSession" class="end-btn">End Session</button>
         </div>
       </div>
@@ -237,13 +241,15 @@ export default {
           console.log('Active session date:', data.date)
           console.log("Today's date:", getTodayDateString())
 
-          // Generate QR code
+          // Generate QR code with scan limit information
           this.qrValue = JSON.stringify({
             type: 'attendance-session',
             sessionId: this.sessionId,
             date: data.date,
             startTime: data.startTime,
-            endTime: data.endTime
+            endTime: data.endTime,
+            scanLimit: 2, // Add scan limit information
+            version: 2 // Add version to indicate new format
           })
 
           // Generate remote link
@@ -309,7 +315,9 @@ export default {
           createdAt: now,
           type: 'office',
           autoReset: true,
-          nextResetTime: nextResetTime
+          nextResetTime: nextResetTime,
+          scanLimit: 2, // Add scan limit
+          version: 2 // Add version
         }
 
         console.log('Creating new office session with data:', {
@@ -417,9 +425,6 @@ export default {
         return
       }
 
-      // Log the next reset time for debugging
-      // console.log('Setting up auto reset for:', new Date(nextResetTime).toString())
-
       // Calculate time until next reset
       const updateCountdown = () => {
         const currentTime = Date.now()
@@ -427,8 +432,6 @@ export default {
 
         // If time is up, reset the QR code
         if (this.timeUntilReset <= 0 && this.activeSession) {
-          // console.log('Reset time reached, performing auto reset')
-
           // Stop the timer immediately to prevent multiple calls
           if (this.resetTimer) {
             clearInterval(this.resetTimer)
@@ -447,58 +450,29 @@ export default {
       this.resetTimer = setInterval(updateCountdown, 1000)
     },
 
-    // Rest of the methods remain the same as in the previous version
     monitorAttendees() {
       if (!this.sessionId) return
 
       const attendeesRef = dbRef(db, `attendance-sessions/${this.sessionId}/attendees`)
       onValue(attendeesRef, (snapshot) => {
         if (snapshot.exists()) {
-          this.attendeeCount = Object.keys(snapshot.val()).length
+          const attendees = snapshot.val()
+
+          // Count unique users by extracting user IDs from the keys
+          const uniqueUserIds = new Set()
+
+          Object.keys(attendees).forEach((key) => {
+            // Extract user ID from the key (either plain userId or userId_timestamp format)
+            const userId = key.split('_')[0] // This will get the userId part
+            uniqueUserIds.add(userId)
+          })
+
+          // Set the count to the number of unique users
+          this.attendeeCount = uniqueUserIds.size
         } else {
           this.attendeeCount = 0
         }
       })
-    },
-
-    calculateNextResetTime(settings) {
-      // Get the reset time and hours from settings
-      const resetTimeStr = settings.resetTime || '07:30'
-      const [hours, minutes] = resetTimeStr.split(':').map(Number)
-
-      // console.log(`Calculating next reset time with settings: resetTime=${resetTimeStr}`)
-
-      // Get current date
-      const now = new Date()
-      // console.log(`Current time: ${now.toString()}`)
-
-      // Set target time to today at the specified reset time
-      const targetDate = new Date(now)
-      targetDate.setHours(hours, minutes, 0, 0)
-      // console.log(`Initial target date: ${targetDate.toString()}`)
-
-      // If that time has already passed today, set to tomorrow at the same time
-      if (targetDate <= now) {
-        targetDate.setDate(targetDate.getDate() + 1)
-        // console.log(`Time already passed today, adjusted to tomorrow: ${targetDate.toString()}`)
-      }
-
-      // If the target date falls on a weekend, skip to Monday
-      const day = targetDate.getDay()
-      if (day === 0) {
-        // Sunday
-        targetDate.setDate(targetDate.getDate() + 1) // Skip to Monday
-        targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
-        // console.log(`Target falls on Sunday, adjusted to Monday: ${targetDate.toString()}`)
-      } else if (day === 6) {
-        // Saturday
-        targetDate.setDate(targetDate.getDate() + 2) // Skip to Monday
-        targetDate.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
-        // console.log(`Target falls on Saturday, adjusted to Monday: ${targetDate.toString()}`)
-      }
-
-      // console.log('Final next reset time calculated:', targetDate.toString())
-      return targetDate.getTime()
     },
 
     async generateQRCode() {
@@ -559,7 +533,9 @@ export default {
           createdAt: Date.now(),
           type: this.sessionType,
           autoReset: this.autoReset,
-          nextResetTime: this.autoReset ? nextResetTime : null
+          nextResetTime: this.autoReset ? nextResetTime : null,
+          scanLimit: 2, // Add scan limit
+          version: 2 // Add version
         }
 
         console.log('Creating new session with data:', {
@@ -599,7 +575,6 @@ export default {
 
         // Get today's date in YYYY-MM-DD format - ALWAYS use current date
         const today = getTodayDateString()
-        // console.log(`Using current date for refreshed session: ${today}`)
 
         // Check if today is a weekend
         if (this.isWeekend(today)) {
@@ -612,8 +587,7 @@ export default {
         // Get auto-reset settings
         const settingsRef = dbRef(db, 'settings/autoReset')
         const settingsSnapshot = (await get(settingsRef))
-          ? // const resetSettings = settingsSnapshot.exists()
-            settingsSnapshot.val()
+          ? settingsSnapshot.val()
           : {
               resetTime: '07:30',
               resetHours: 16
@@ -643,7 +617,7 @@ export default {
         )
 
         // Determine session type based on user choice
-        const sessionType = createOfficeSession ? 'office' : this.activeSession.type // Changed from 'morning' to 'office'
+        const sessionType = createOfficeSession ? 'office' : this.activeSession.type
 
         // Create new session data with today's date
         const sessionData = {
@@ -653,15 +627,10 @@ export default {
           createdAt: Date.now(),
           type: sessionType, // Use the determined session type
           autoReset: this.activeSession.autoReset,
-          nextResetTime: this.activeSession.autoReset ? nextResetTime : null
+          nextResetTime: this.activeSession.autoReset ? nextResetTime : null,
+          scanLimit: 2, // Add scan limit
+          version: 2 // Add version
         }
-
-        // console.log('Creating refreshed session with data:', {
-        //   date: sessionData.date,
-        //   type: sessionType,
-        //   startTime: new Date(sessionData.startTime).toLocaleTimeString(),
-        //   endTime: new Date(sessionData.endTime).toLocaleTimeString()
-        // })
 
         // Save new session
         const sessionRef = dbRef(db, `attendance-sessions/${this.sessionId}`)
@@ -685,85 +654,6 @@ export default {
       } catch (error) {
         console.error('Error refreshing QR code:', error)
         alert('Failed to refresh QR code: ' + error.message)
-      }
-    },
-
-    async isResetTimeFromSettings(resetTime) {
-      try {
-        // Get auto-reset settings
-        const settingsRef = dbRef(db, 'settings/autoReset')
-        const settingsSnapshot = await get(settingsRef)
-
-        if (settingsSnapshot.exists()) {
-          const settings = settingsSnapshot.val()
-          const settingsResetTime = settings.resetTime
-
-          if (settingsResetTime) {
-            // Convert both times to minutes since midnight for comparison
-            const [settingsHours, settingsMinutes] = settingsResetTime.split(':').map(Number)
-            const settingsTimeInMinutes = settingsHours * 60 + settingsMinutes
-
-            // Get the reset time as a Date object
-            const resetTimeDate = new Date(resetTime)
-            const resetTimeInMinutes = resetTimeDate.getHours() * 60 + resetTimeDate.getMinutes()
-
-            // Allow a 5-minute margin for comparison
-            return Math.abs(resetTimeInMinutes - settingsTimeInMinutes) <= 5
-          }
-        }
-
-        return false
-      } catch (error) {
-        console.error('Error checking reset time:', error)
-        return false
-      }
-    },
-
-    async manualReset() {
-      if (!this.activeSession) {
-        alert('No active session to reset')
-        return
-      }
-
-      const today = getTodayDateString()
-      const currentSessionDate = this.activeSession.date
-
-      let confirmMessage = 'Are you sure you want to reset the session?\n\n'
-
-      if (currentSessionDate !== today) {
-        confirmMessage += `This will update the session date from ${currentSessionDate} to today (${today}).\n\n`
-      }
-
-      confirmMessage += 'A new morning session will be created and the current session will be archived.'
-
-      if (confirm(confirmMessage)) {
-        try {
-          // Disable the button during reset
-          const resetButton = document.querySelector('.manual-reset-btn')
-          if (resetButton) {
-            resetButton.disabled = true
-            resetButton.textContent = 'Resetting...'
-          }
-
-          // Perform the reset directly
-          const success = await this.performAutoReset(this.activeSession)
-
-          if (success) {
-            alert(`Session reset successful. A new morning session has been created for today (${today}).`)
-          } else {
-            alert('Session reset failed. Please check the console for details.')
-          }
-        } catch (error) {
-          console.error('Manual reset error:', error)
-          alert('An error occurred during reset: ' + error.message)
-        } finally {
-          // Re-enable the button
-          const resetButton = document.querySelector('.manual-reset-btn')
-          if (resetButton) {
-            resetButton.disabled = false
-            resetButton.textContent = 'Reset to Morning Session'
-          }
-        }
       }
     },
 
@@ -797,51 +687,61 @@ export default {
       const printWindow = window.open('', '_blank')
 
       const content = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Attendance QR Code</title>
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Attendance QR Code</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          text-align: center;
+          padding: 20px;
+        }
+        .qr-container {
+          margin: 20px auto;
+          max-width: 400px;
+        }
+        .session-info {
+          margin-top: 20px;
+          text-align: left;
+          border-top: 1px solid #ddd;
+          padding-top: 20px;
+        }
+        .scan-limit {
+          margin-top: 15px;
+          padding: 10px;
+          background-color: #e8f5e9;
+          border-radius: 4px;
+          border-left: 3px solid #4caf50;
+        }
+        @media print {
+          .no-print {
+            display: none;
           }
-          .qr-container {
-            margin: 20px auto;
-            max-width: 400px;
-          }
-          .session-info {
-            margin-top: 20px;
-            text-align: left;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-          }
-          @media print {
-            .no-print {
-              display: none;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <h2>Attendance QR Code</h2>
-        <div class="qr-container">
-          <img src="${document.querySelector('.qr-code canvas').toDataURL()}" alt="QR Code" style="width: 100%;">
+        }
+      </style>
+    </head>
+    <body>
+      <h2>Attendance QR Code</h2>
+      <div class="qr-container">
+        <img src="${document.querySelector('.qr-code canvas').toDataURL()}" alt="QR Code" style="width: 100%;">
+      </div>
+      <div class="session-info">
+        <h3>Session Information</h3>
+        <p><strong>Date:</strong> ${this.formatDate(this.activeSession.date)}</p>
+        <p><strong>Valid from:</strong> ${this.formatTime(this.activeSession.startTime)}</p>
+        <p><strong>Valid until:</strong> ${this.formatTime(this.activeSession.endTime)}</p>
+        <div class="scan-limit">
+          <p><strong>Scan Limit:</strong> 2 scans per day</p>
+          <p>First scan: Check-in | Second scan: Check-out</p>
         </div>
-        <div class="session-info">
-          <h3>Session Information</h3>
-          <p><strong>Date:</strong> ${this.formatDate(this.activeSession.date)}</p>
-          <p><strong>Valid from:</strong> ${this.formatTime(this.activeSession.startTime)}</p>
-          <p><strong>Valid until:</strong> ${this.formatTime(this.activeSession.endTime)}</p>
-          <p>Scan this QR code to mark your attendance.</p>
-        </div>
-        <div class="no-print">
-          <button onclick="window.print()">Print</button>
-        </div>
-      </body>
-      </html>
-    `
+      </div>
+      <div class="no-print">
+        <button onclick="window.print()">Print</button>
+      </div>
+    </body>
+    </html>
+  `
 
       printWindow.document.open()
       printWindow.document.write(content)
@@ -861,7 +761,6 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        // Changed from 'morning' to 'office'
         return 'Office (07:30 AM - 04:30 PM)'
       } else if (type === 'morning') {
         // For backward compatibility
@@ -1160,19 +1059,5 @@ input[type='checkbox'] {
   font-weight: bold;
   color: #ff9800;
   margin: 10px 0;
-}
-
-.manual-reset-btn {
-  background-color: #9c27b0;
-  color: white;
-  padding: 10px 20px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.manual-reset-btn:disabled {
-  background-color: #d1c4e9;
-  cursor: not-allowed;
 }
 </style>

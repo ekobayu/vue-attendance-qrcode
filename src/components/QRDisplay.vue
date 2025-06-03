@@ -23,13 +23,13 @@
           <p><strong>Type:</strong> {{ getSessionTypeDisplay(session.type) }}</p>
           <p><strong>Valid from:</strong> {{ formatTime(session.startTime) }}</p>
           <p><strong>Valid until:</strong> {{ formatTime(session.endTime) }}</p>
-          <p>Scan this QR code to mark your attendance.</p>
+          <div class="scan-info">
+            <p><strong>Scan Limit:</strong> 2 scans per day</p>
+            <p>First scan: Check-in | Second scan: Check-out</p>
+          </div>
         </div>
         <div v-if="session.autoReset" class="auto-refresh">
           <p>This QR code will automatically refresh at the next scheduled time.</p>
-          <!-- <p class="next-reset" v-if="session.nextResetTime">
-            Next reset: <span class="countdown">{{ formatNextReset(session.nextResetTime) }}</span>
-          </p> -->
         </div>
       </div>
     </div>
@@ -86,13 +86,15 @@ export default {
             const data = snapshot.val()
             this.session = data
 
-            // Generate QR code value
+            // Generate QR code value with scan limit information
             this.qrValue = JSON.stringify({
               type: 'attendance-session',
               sessionId: data.sessionId,
               date: data.date,
               startTime: data.startTime,
-              endTime: data.endTime
+              endTime: data.endTime,
+              scanLimit: 2, // Add scan limit information
+              version: 2 // Add version to indicate new format
             })
 
             // Set up countdown timer if auto-reset is enabled
@@ -146,8 +148,11 @@ export default {
 
     formatDate(dateString) {
       if (!dateString) return ''
+
+      // Use local date functions to ensure correct timezone
+      const date = new Date(dateString)
       const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }
-      return new Date(dateString).toLocaleDateString(undefined, options)
+      return date.toLocaleDateString(undefined, options)
     },
 
     formatTime(timestamp) {
@@ -242,6 +247,14 @@ nav {
   text-align: left;
   border-top: 1px solid #ddd;
   padding-top: 20px;
+}
+
+.scan-info {
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #e8f5e9;
+  border-radius: 4px;
+  border-left: 3px solid #4caf50;
 }
 
 .auto-refresh {

@@ -1,7 +1,50 @@
 <template>
   <div class="qr-scanner">
-    <div v-if="!scanning && !attendanceMarked">
-      <button @click="startScanning" class="scan-btn">Start Scanner</button>
+    <!-- Scan Status Display -->
+    <div v-if="todayScans" class="scan-status-display">
+      <h3>Today's Attendance</h3>
+      <div class="scan-details">
+        <div class="scan-row">
+          <div class="scan-label">Check-in:</div>
+          <div v-if="todayScans.firstScan" class="scan-time">
+            {{ formatTime(todayScans.firstScan) }}
+            <span class="scan-badge success">Recorded</span>
+          </div>
+          <div v-else class="scan-time">
+            Not recorded
+            <span class="scan-badge pending">Pending</span>
+          </div>
+        </div>
+
+        <div class="scan-row">
+          <div class="scan-label">Check-out:</div>
+          <div v-if="todayScans.secondScan" class="scan-time">
+            {{ formatTime(todayScans.secondScan) }}
+            <span class="scan-badge success">Recorded</span>
+          </div>
+          <div v-else class="scan-time">
+            Not recorded
+            <span class="scan-badge pending">Pending</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="scan-limit-info">
+        <span v-if="scanCount >= 2" class="limit-reached">Daily scan limit reached</span>
+        <span v-else>{{ 2 - scanCount }} scans remaining today</span>
+      </div>
+    </div>
+
+    <!-- Scanner Controls -->
+    <div v-if="!scanning && !attendanceMarked && scanCount < 2">
+      <button @click="startScanning" class="scan-btn">
+        {{ scanCount === 0 ? 'Scan to Check In' : 'Scan to Check Out' }}
+      </button>
+    </div>
+    <div v-else-if="!scanning && !attendanceMarked && scanCount >= 2" class="limit-message">
+      <div class="limit-icon">✓</div>
+      <h3>Daily Scan Limit Reached</h3>
+      <p>You have already completed both check-in and check-out for today.</p>
     </div>
 
     <div v-else-if="scanning" class="scanner-container">
@@ -11,11 +54,12 @@
 
     <div v-else-if="attendanceMarked" class="success-container">
       <div class="success-icon">✓</div>
-      <h3>Attendance Marked Successfully!</h3>
+      <h3>{{ scanCount === 1 ? 'Check-In Recorded!' : 'Check-Out Recorded!' }}</h3>
       <p>Date: {{ formatDate(markDate) }}</p>
       <p>Time: {{ formatTime(markTime) }}</p>
       <p>Session: {{ sessionType }}</p>
-      <button @click="resetAttendance" class="reset-btn">Scan Another Code</button>
+      <button v-if="scanCount < 2" @click="resetAttendance" class="reset-btn">Close</button>
+      <p v-else class="limit-note">Daily scan limit reached (2/2)</p>
     </div>
 
     <div v-if="error && !attendanceMarked" class="error-message">
@@ -27,7 +71,8 @@
 <script>
 import { QrcodeStream } from 'qrcode-reader-vue3'
 import { auth, db } from '../firebase/config'
-import { ref as dbRef, set, get, push } from 'firebase/database'
+import { ref as dbRef, set, get } from 'firebase/database'
+import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'QRCodeScanner',
@@ -41,11 +86,46 @@ export default {
       markTime: null,
       markDate: null,
       sessionType: '',
-      error: null
+      error: null,
+      todayScans: null,
+      scanCount: 0
     }
   },
+  mounted() {
+    this.checkTodayScans()
+  },
   methods: {
+    async checkTodayScans() {
+      if (!auth.currentUser) return
+
+      const today = getTodayDateString()
+      const userAttendanceRef = dbRef(db, `user-attendance/${auth.currentUser.uid}/${today}`)
+
+      try {
+        const snapshot = await get(userAttendanceRef)
+        if (snapshot.exists()) {
+          this.todayScans = snapshot.val()
+
+          // Calculate scan count
+          this.scanCount = 0
+          if (this.todayScans.firstScan) this.scanCount++
+          if (this.todayScans.secondScan) this.scanCount++
+        } else {
+          this.todayScans = null
+          this.scanCount = 0
+        }
+      } catch (error) {
+        console.error("Error checking today's scans:", error)
+      }
+    },
+
     startScanning() {
+      // Check if user has already reached scan limit
+      if (this.scanCount >= 2) {
+        this.error = 'You have already reached the daily scan limit (2 scans)'
+        return
+      }
+
       this.scanning = true
       this.error = null
     },
@@ -138,42 +218,74 @@ export default {
 
         const userId = auth.currentUser.uid
         const userEmail = auth.currentUser.email
+        const today = getTodayDateString()
 
-        // Check if user already marked attendance for this session
-        if (sessionData.attendees && sessionData.attendees[userId]) {
-          this.error =
-            'You have already marked your attendance for this session at ' +
-            this.formatTime(sessionData.attendees[userId].timestamp)
-          return
-        }
+        // Check if user has already scanned today
+        const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${today}`)
+        const userAttendanceSnapshot = await get(userAttendanceRef)
 
-        // Mark attendance in session
-        const attendeeRef = dbRef(db, `attendance-sessions/${qrData.sessionId}/attendees/${userId}`)
-        await set(attendeeRef, {
-          email: userEmail,
-          timestamp: this.markTime
-        })
-
-        // Also save to daily attendance records
-        const dailyAttendanceRef = dbRef(db, `daily-attendance/${sessionData.date}`)
-        const newAttendanceRef = push(dailyAttendanceRef)
-        await set(newAttendanceRef, {
-          userId: userId,
-          email: userEmail,
-          timestamp: this.markTime,
+        let attendanceData = {
+          timestamp: now, // For backward compatibility
           sessionId: qrData.sessionId,
           sessionType: sessionData.type
+        }
+
+        if (userAttendanceSnapshot.exists()) {
+          const existingData = userAttendanceSnapshot.val()
+
+          // Update attendance data with existing fields
+          attendanceData = {
+            ...existingData,
+            ...attendanceData
+          }
+
+          // Check scan count
+          let localScanCount = 0
+          if (existingData.firstScan) localScanCount++
+          if (existingData.secondScan) localScanCount++
+
+          if (localScanCount >= 2) {
+            this.error = 'You have already scanned twice today'
+            return
+          }
+
+          // Record appropriate scan
+          if (localScanCount === 0) {
+            attendanceData.firstScan = now
+            this.scanCount = 1
+          } else {
+            attendanceData.secondScan = now
+            this.scanCount = 2
+          }
+        } else {
+          // First scan of the day
+          attendanceData.firstScan = now
+          this.scanCount = 1
+        }
+
+        // Update user's attendance record
+        await set(userAttendanceRef, attendanceData)
+
+        // Update daily attendance record
+        const dailyAttendanceRef = dbRef(db, `daily-attendance/${today}/${userId}`)
+        await set(dailyAttendanceRef, {
+          ...attendanceData,
+          email: userEmail
         })
 
-        // Also save to user's attendance history
-        const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${sessionData.date}`)
-        await set(userAttendanceRef, {
-          timestamp: this.markTime,
-          recordId: newAttendanceRef.key,
-          sessionType: sessionData.type
+        // Update session attendees
+        const sessionAttendeeRef = dbRef(db, `attendance-sessions/${qrData.sessionId}/attendees/${userId}`)
+        await set(sessionAttendeeRef, {
+          email: userEmail,
+          timestamp: now,
+          firstScan: attendanceData.firstScan,
+          secondScan: attendanceData.secondScan || null
         })
 
         this.attendanceMarked = true
+
+        // Refresh today's scans
+        await this.checkTodayScans()
       } catch (error) {
         console.error('Error marking attendance:', error)
         this.error = 'Failed to mark attendance: ' + error.message
@@ -237,10 +349,81 @@ export default {
 .qr-scanner {
   max-width: 500px;
   margin: 0 auto;
-  /* padding: 20px; */
   background-color: #fff;
   border-radius: 8px;
-  /* box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1); */
+}
+
+.scan-status-display {
+  margin-bottom: 20px;
+  padding: 15px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  border-left: 4px solid #4caf50;
+}
+
+.scan-status-display h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #333;
+  font-size: 1.1em;
+}
+
+.scan-details {
+  background-color: white;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.scan-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.scan-row:last-child {
+  border-bottom: none;
+}
+
+.scan-label {
+  font-weight: bold;
+  color: #333;
+}
+
+.scan-time {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scan-badge {
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.scan-badge.success {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+.scan-badge.pending {
+  background-color: #fff8e1;
+  color: #ffa000;
+}
+
+.scan-limit-info {
+  margin-top: 15px;
+  text-align: center;
+  font-size: 14px;
+  color: #666;
+}
+
+.limit-reached {
+  color: #f44336;
+  font-weight: bold;
 }
 
 .instructions {
@@ -315,5 +498,31 @@ export default {
   color: #a94442;
   border-radius: 4px;
   text-align: center;
+}
+
+.limit-message {
+  text-align: center;
+  padding: 20px;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.limit-icon {
+  font-size: 48px;
+  color: #ff9800;
+  margin-bottom: 10px;
+  background-color: #fff3e0;
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+}
+
+.limit-note {
+  margin-top: 15px;
+  color: #ff9800;
+  font-weight: bold;
 }
 </style>
