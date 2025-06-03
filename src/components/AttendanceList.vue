@@ -156,6 +156,29 @@
         <div v-if="Object.keys(groupedSessions).length === 0" class="no-records">No active sessions found.</div>
 
         <div v-else>
+          <div class="batch-actions" v-if="getTotalSessionCount(groupedSessions) > 0">
+            <div class="selection-info" v-if="selectedActiveSessions.length > 0">
+              {{ selectedActiveSessions.length }} sessions selected
+            </div>
+            <button
+              @click="selectAllActiveSessions"
+              class="select-all-btn"
+              v-if="selectedActiveSessions.length < getTotalSessionCount(groupedSessions)"
+            >
+              Select All
+            </button>
+            <button
+              @click="clearActiveSelection"
+              class="clear-selection-btn"
+              v-else-if="selectedActiveSessions.length > 0"
+            >
+              Clear Selection
+            </button>
+            <button @click="batchArchiveSessions" class="batch-archive-btn" v-if="selectedActiveSessions.length > 0">
+              Archive Selected
+            </button>
+          </div>
+
           <!-- Loop through each month group -->
           <div v-for="(sessions, month) in groupedSessions" :key="month" class="month-group">
             <div class="month-header" @click="toggleSessionMonthExpand(month)">
@@ -168,9 +191,12 @@
 
             <!-- Collapsible session list for this month -->
             <div v-if="expandedSessionMonths[month]" class="month-sessions">
-              <!-- Loop through sessions in this month -->
-              <div v-for="session in sessions" :key="session.id" class="session-item">
+              <!-- Change 'sessions' to 'groupedSessions[month]' -->
+              <div v-for="session in groupedSessions[month]" :key="session.id" class="session-item">
                 <div class="session-header">
+                  <div class="session-select">
+                    <input type="checkbox" :value="session.id" v-model="selectedActiveSessions" />
+                  </div>
                   <div class="session-date">{{ formatDate(session.date) }}</div>
                   <div class="session-time">
                     {{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}
@@ -233,15 +259,14 @@
         </div>
 
         <div v-else>
-          <!-- Add this above the archived sessions list -->
-          <div class="batch-actions" v-if="filteredArchivedSessions.length > 0">
+          <div class="batch-actions" v-if="getTotalSessionCount(groupedArchivedSessions) > 0">
             <div class="selection-info" v-if="selectedArchivedSessions.length > 0">
               {{ selectedArchivedSessions.length }} sessions selected
             </div>
             <button
               @click="selectAllArchivedSessions"
               class="select-all-btn"
-              v-if="selectedArchivedSessions.length < filteredArchivedSessions.length"
+              v-if="selectedArchivedSessions.length < getTotalSessionCount(groupedArchivedSessions)"
             >
               Select All
             </button>
@@ -274,7 +299,8 @@
             <!-- Collapsible session list for this month -->
             <div v-if="expandedMonths[month]" class="month-sessions">
               <!-- Loop through sessions in this month -->
-              <div v-for="session in sessions" :key="session.id" class="session-item archived">
+              <!-- Change 'sessions' to 'groupedArchivedSessions[month]' -->
+              <div v-for="session in groupedArchivedSessions[month]" :key="session.id" class="session-item archived">
                 <div class="session-header">
                   <div class="session-select">
                     <input type="checkbox" :value="session.id" v-model="selectedArchivedSessions" />
@@ -484,7 +510,8 @@ export default {
       pendingAction: null,
       pendingActionData: null,
 
-      selectedArchivedSessions: []
+      selectedArchivedSessions: [],
+      selectedActiveSessions: []
     }
   },
   computed: {
@@ -517,8 +544,10 @@ export default {
         this.loadDailyAttendance()
       } else if (newTab === 'sessions') {
         this.loadSessions()
+        this.selectedActiveSessions = [] // Reset selection
       } else if (newTab === 'archived') {
         this.loadArchivedSessions()
+        this.selectedArchivedSessions = [] // Reset selection
       }
     }
   },
@@ -657,22 +686,15 @@ export default {
         const data = snapshot.val()
         if (data) {
           this.sessions = Object.keys(data)
-            .map((key) => {
-              // Log the attendees data for debugging
-              console.log(
-                `Session ${key} attendees:`,
-                data[key].attendees ? Object.keys(data[key].attendees).length : 'No attendees'
-              )
-
-              return {
-                id: key,
-                ...data[key]
-              }
-            })
+            .map((key) => ({
+              id: key,
+              ...data[key]
+            }))
             .sort((a, b) => new Date(b.date) - new Date(a.date) || b.startTime - a.startTime)
           this.filterSessions()
         } else {
           this.sessions = []
+          this.filteredSessions = []
           this.groupedSessions = {}
         }
       })
@@ -809,6 +831,12 @@ export default {
             (session.date && session.date.toLowerCase().includes(query))
         )
       }
+
+      // Reset selection when filter changes
+      this.selectedActiveSessions = []
+
+      // Store filtered sessions
+      this.filteredSessions = filtered
 
       // Group by month
       this.groupedSessions = this.groupSessionsByMonth(filtered)
@@ -1163,6 +1191,8 @@ export default {
         await this.performDeleteArchivedSession(this.pendingActionData)
       } else if (this.pendingAction === 'batchDeleteArchived') {
         await this.performBatchDeleteArchivedSessions(this.pendingActionData)
+      } else if (this.pendingAction === 'batchArchive') {
+        await this.performBatchArchiveSessions(this.pendingActionData)
       }
 
       this.showConfirmModal = false
@@ -1258,8 +1288,104 @@ export default {
       }
     },
 
+    selectAllActiveSessions() {
+      // Get all session IDs from all month groups
+      const allSessionIds = []
+
+      // Loop through all months in the grouped sessions
+      Object.values(this.groupedSessions).forEach((monthSessions) => {
+        // Add all session IDs from this month to our array
+        monthSessions.forEach((session) => {
+          allSessionIds.push(session.id)
+        })
+      })
+
+      // Set all session IDs to the selected array
+      this.selectedActiveSessions = allSessionIds
+    },
+
+    clearActiveSelection() {
+      this.selectedActiveSessions = []
+    },
+
+    batchArchiveSessions() {
+      const count = this.selectedActiveSessions.length
+      this.confirmModalTitle = 'Archive Selected Sessions'
+      this.confirmModalMessage = `Are you sure you want to archive ${count} selected session(s)?`
+      this.confirmButtonText = 'Archive All Selected'
+      this.pendingAction = 'batchArchive'
+      this.pendingActionData = [...this.selectedActiveSessions] // Create a copy of the array
+      this.showConfirmModal = true
+    },
+
+    async performBatchArchiveSessions(sessionIds) {
+      const toast = useToast()
+      try {
+        if (!sessionIds || !sessionIds.length) {
+          throw new Error('No sessions selected for archiving')
+        }
+
+        // Archive each session one by one
+        for (const sessionId of sessionIds) {
+          // Find the session data
+          const session = this.sessions.find((s) => s.id === sessionId)
+          if (!session) continue
+
+          // Add archived timestamp
+          const archivedSession = {
+            ...session,
+            archivedAt: Date.now()
+          }
+
+          // Save to archived sessions
+          const archivedRef = dbRef(db, `archived-sessions/${sessionId}`)
+          await set(archivedRef, archivedSession)
+
+          // Remove from active sessions
+          const activeRef = dbRef(db, `attendance-sessions/${sessionId}`)
+          await remove(activeRef)
+        }
+
+        // Show success message
+        toast.success(`${sessionIds.length} sessions have been archived.`, {
+          position: 'top-center',
+          duration: 3000
+        })
+
+        // Clear selection
+        this.selectedActiveSessions = []
+
+        // Refresh sessions lists
+        this.loadSessions()
+        this.loadArchivedSessions()
+
+        // If an archived session was being viewed in the modal, close it
+        if (this.selectedSession && sessionIds.includes(this.selectedSession.id)) {
+          this.closeSessionDetails()
+        }
+      } catch (error) {
+        console.error('Error batch archiving sessions:', error)
+        toast.error(`Failed to archive sessions: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
+      }
+    },
+
     selectAllArchivedSessions() {
-      this.selectedArchivedSessions = this.filteredArchivedSessions.map((session) => session.id)
+      // Get all session IDs from all month groups
+      const allSessionIds = []
+
+      // Loop through all months in the grouped archived sessions
+      Object.values(this.groupedArchivedSessions).forEach((monthSessions) => {
+        // Add all session IDs from this month to our array
+        monthSessions.forEach((session) => {
+          allSessionIds.push(session.id)
+        })
+      })
+
+      // Set all session IDs to the selected array
+      this.selectedArchivedSessions = allSessionIds
     },
 
     clearArchivedSelection() {
@@ -1312,6 +1438,15 @@ export default {
           duration: 5000
         })
       }
+    },
+
+    getTotalSessionCount(groupedData) {
+      let count = 0
+      // Sum up the length of each month's sessions array
+      Object.values(groupedData).forEach((monthSessions) => {
+        count += monthSessions.length
+      })
+      return count
     },
 
     formatDate(dateString) {
@@ -1663,6 +1798,7 @@ tr:nth-child(even) {
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  margin-top: 20px;
 }
 
 .no-records {
@@ -2155,5 +2291,20 @@ tr:nth-child(even) {
 .session-header {
   display: flex;
   align-items: center;
+}
+
+.batch-archive-btn {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+.batch-archive-btn:hover {
+  background-color: #f57c00;
 }
 </style>
