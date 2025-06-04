@@ -66,16 +66,17 @@
               <th @click="sortTable('locationIn')" :class="getSortClass('locationIn')">
                 Location In <span class="sort-icon">{{ getSortIcon('locationIn') }}</span>
               </th>
+              <th>Map URL In</th>
               <th @click="sortTable('outTime')" :class="getSortClass('outTime')">
                 Out Time <span class="sort-icon">{{ getSortIcon('outTime') }}</span>
               </th>
               <th @click="sortTable('locationOut')" :class="getSortClass('locationOut')">
                 Location Out <span class="sort-icon">{{ getSortIcon('locationOut') }}</span>
               </th>
+              <th>Map URL Out</th>
               <th @click="sortTable('remote')" :class="getSortClass('remote')">
                 Type <span class="sort-icon">{{ getSortIcon('remote') }}</span>
               </th>
-              <th v-if="hasRemoteAttendees">Map</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -95,6 +96,22 @@
               </td>
               <td>{{ attendee.locationIn || 'Office' }}</td>
               <td>
+                <a
+                  v-if="
+                    attendee.firstScanDetails &&
+                    attendee.firstScanDetails.remote &&
+                    getMapUrlForScan(attendee.firstScanDetails)
+                  "
+                  :href="getMapUrlForScan(attendee.firstScanDetails)"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="map-link"
+                  title="View check-in location on Google Maps"
+                >
+                  <span class="map-icon">🗺️</span>
+                </a>
+              </td>
+              <td>
                 <span v-if="attendee.outTime">
                   {{ formatTime(attendee.outTime) }}
                   <span
@@ -109,21 +126,25 @@
               </td>
               <td>{{ attendee.locationOut || (attendee.outTime ? 'Office' : '') }}</td>
               <td>
-                <span :class="attendee.badgeType">
-                  {{ attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office' }}
-                </span>
-              </td>
-              <td v-if="hasRemoteAttendees">
                 <a
-                  v-if="(attendee.remote || attendee.mixed) && (attendee.mapsUrl || hasCoordinates(attendee))"
-                  :href="attendee.mapsUrl || getGoogleMapsUrl(attendee)"
+                  v-if="
+                    attendee.secondScanDetails &&
+                    attendee.secondScanDetails.remote &&
+                    getMapUrlForScan(attendee.secondScanDetails)
+                  "
+                  :href="getMapUrlForScan(attendee.secondScanDetails)"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="map-link"
-                  title="View location on Google Maps"
+                  title="View check-out location on Google Maps"
                 >
                   <span class="map-icon">🗺️</span>
                 </a>
+              </td>
+              <td>
+                <span :class="attendee.badgeType">
+                  {{ attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office' }}
+                </span>
               </td>
               <td>
                 <button @click="confirmDeleteAttendance(attendee)" class="delete-btn" title="Remove attendance record">
@@ -228,7 +249,7 @@
                   <div class="session-info">
                     <div class="session-type">{{ getSessionTypeDisplay(session.type) }}</div>
                     <div class="attendee-count">
-                      <strong>{{ getAttendeeCount(session) }}</strong> attendees
+                      <strong>{{ session.attendeeCount || getAttendeeCount(session) }}</strong> attendees
                     </div>
                   </div>
 
@@ -387,7 +408,7 @@
             </div>
             <div class="summary-item">
               <span class="label">Attendees:</span>
-              <span class="value">{{ sessionAttendees.length }}</span>
+              <span class="value">{{ selectedSession.attendeeCount || sessionAttendees.length }}</span>
             </div>
           </div>
 
@@ -408,11 +429,12 @@
                 <th>In Time</th>
                 <th>In Type</th>
                 <th>Location In</th>
+                <th>Map URL In</th>
                 <th>Out Time</th>
                 <th>Out Type</th>
                 <th>Location Out</th>
+                <th>Map URL Out</th>
                 <th>Type</th>
-                <th>Map</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -427,6 +449,22 @@
                   </span>
                 </td>
                 <td>{{ attendee.locationIn || (attendee.remote ? attendee.location : 'Office') }}</td>
+                <td>
+                  <a
+                    v-if="
+                      attendee.firstScanDetails &&
+                      attendee.firstScanDetails.remote &&
+                      getMapUrlForScan(attendee.firstScanDetails)
+                    "
+                    :href="getMapUrlForScan(attendee.firstScanDetails)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="map-link"
+                    title="View check-in location on Google Maps"
+                  >
+                    <span class="map-icon">🗺️</span>
+                  </a>
+                </td>
                 <td>{{ attendee.outTime ? formatTime(attendee.outTime) : 'Pending' }}</td>
                 <td>
                   <span v-if="attendee.outTime" :class="getOutTypeBadgeClass(attendee)">
@@ -435,21 +473,25 @@
                 </td>
                 <td>{{ attendee.locationOut || (attendee.outTime ? 'Office' : '') }}</td>
                 <td>
-                  <span :class="getAttendanceTypeBadgeClass(attendee)">
-                    {{ getAttendanceType(attendee) }}
-                  </span>
-                </td>
-                <td>
                   <a
-                    v-if="(attendee.remote || attendee.mixed) && (attendee.mapsUrl || hasCoordinates(attendee))"
-                    :href="attendee.mapsUrl || getGoogleMapsUrl(attendee)"
+                    v-if="
+                      attendee.secondScanDetails &&
+                      attendee.secondScanDetails.remote &&
+                      getMapUrlForScan(attendee.secondScanDetails)
+                    "
+                    :href="getMapUrlForScan(attendee.secondScanDetails)"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="map-link"
-                    title="View location on Google Maps"
+                    title="View check-out location on Google Maps"
                   >
                     <span class="map-icon">🗺️</span>
                   </a>
+                </td>
+                <td>
+                  <span :class="getAttendanceTypeBadgeClass(attendee)">
+                    {{ getAttendanceType(attendee) }}
+                  </span>
                 </td>
                 <td>
                   <button
@@ -599,6 +641,33 @@ export default {
     this.loadAvailableMonths()
   },
   methods: {
+    getUniqueAttendeeCount(attendees) {
+      if (!attendees || !attendees.length) return 0
+
+      // Count unique users by their user IDs
+      const uniqueUserIds = new Set(
+        attendees.filter((attendee) => attendee && attendee.userId).map((attendee) => attendee.userId)
+      )
+
+      return uniqueUserIds.size
+    },
+
+    getMapUrlForScan(scanDetails) {
+      if (!scanDetails || !scanDetails.remote) return null
+
+      // If the scan has a direct mapsUrl, use it
+      if (scanDetails.mapsUrl) {
+        return scanDetails.mapsUrl
+      }
+
+      // Otherwise, try to construct a URL from coordinates
+      if (scanDetails.coordinates && scanDetails.coordinates.latitude && scanDetails.coordinates.longitude) {
+        return `https://www.google.com/maps?q=${scanDetails.coordinates.latitude},${scanDetails.coordinates.longitude}`
+      }
+
+      return null
+    },
+
     async loadAvailableMonths() {
       try {
         // Get reference to daily-attendance
@@ -698,9 +767,11 @@ export default {
             'In Time',
             'In Type',
             'Location In',
+            'Map URL In',
             'Out Time',
             'Out Type',
             'Location Out',
+            'Map URL Out',
             'Attendance Type'
           ]
 
@@ -713,9 +784,11 @@ export default {
               this.formatTime(record.inTime),
               record.inType,
               record.locationIn || 'Office',
+              record.mapUrlIn || '',
               record.outTime ? this.formatTime(record.outTime) : 'Pending',
               record.outType || '',
               record.locationOut || (record.outTime ? 'Office' : ''),
+              record.mapUrlOut || '',
               record.attendanceType
             ]
 
@@ -806,6 +879,22 @@ export default {
                 : 'Office'
               : null
 
+          // Get map URLs for in and out
+          const mapUrlIn = firstRecord.remote
+            ? firstRecord.mapsUrl ||
+              (firstRecord.coordinates
+                ? `https://www.google.com/maps?q=${firstRecord.coordinates.latitude},${firstRecord.coordinates.longitude}`
+                : null)
+            : null
+
+          const mapUrlOut =
+            lastRecord && lastRecord !== firstRecord && lastRecord.remote
+              ? lastRecord.mapsUrl ||
+                (lastRecord.coordinates
+                  ? `https://www.google.com/maps?q=${lastRecord.coordinates.latitude},${lastRecord.coordinates.longitude}`
+                  : null)
+              : null
+
           if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
             // Both records are remote or only first scan exists and is remote
             attendanceType = 'Remote'
@@ -843,7 +932,9 @@ export default {
             outType: outType,
             location: location,
             locationIn: locationIn,
-            locationOut: locationOut
+            locationOut: locationOut,
+            mapUrlIn: mapUrlIn,
+            mapUrlOut: mapUrlOut
           })
         })
       }
@@ -936,6 +1027,22 @@ export default {
               : 'Office'
             : null
 
+        // Get map URLs for in and out
+        const mapUrlIn = firstRecord.remote
+          ? firstRecord.mapsUrl ||
+            (firstRecord.coordinates
+              ? `https://www.google.com/maps?q=${firstRecord.coordinates.latitude},${firstRecord.coordinates.longitude}`
+              : null)
+          : null
+
+        const mapUrlOut =
+          lastRecord && lastRecord !== firstRecord && lastRecord.remote
+            ? lastRecord.mapsUrl ||
+              (lastRecord.coordinates
+                ? `https://www.google.com/maps?q=${lastRecord.coordinates.latitude},${lastRecord.coordinates.longitude}`
+                : null)
+            : null
+
         if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
           // Both records are remote or only first scan exists and is remote
           attendanceType = 'remote'
@@ -971,6 +1078,8 @@ export default {
           location: location,
           locationIn: locationIn,
           locationOut: locationOut,
+          mapUrlIn: mapUrlIn,
+          mapUrlOut: mapUrlOut,
           coordinates: firstRecord.remote
             ? firstRecord.coordinates
             : lastRecord && lastRecord.remote
@@ -993,17 +1102,33 @@ export default {
       })
     },
 
-    loadSessions() {
+    async loadSessions() {
       const sessionsRef = dbRef(db, 'attendance-sessions')
-      onValue(sessionsRef, (snapshot) => {
+      onValue(sessionsRef, async (snapshot) => {
         const data = snapshot.val()
         if (data) {
-          this.sessions = Object.keys(data)
-            .map((key) => ({
-              id: key,
-              ...data[key]
-            }))
-            .sort((a, b) => new Date(b.date) - new Date(a.date) || b.startTime - a.startTime)
+          // Create an array of sessions with basic data
+          const sessionsArray = Object.keys(data).map((key) => ({
+            id: key,
+            ...data[key]
+          }))
+
+          // Sort sessions by date and time
+          sessionsArray.sort((a, b) => new Date(b.date) - new Date(a.date) || b.startTime - a.startTime)
+
+          // Set sessions array immediately for UI responsiveness
+          this.sessions = sessionsArray
+          this.filterSessions()
+
+          // Then compute accurate attendee counts in the background
+          for (const session of sessionsArray) {
+            const count = await this.getDirectAttendeeCount(session.id, false)
+            // Update the session with the accurate count
+            session.attendeeCount = count
+          }
+
+          // Update the sessions array with the new counts
+          this.sessions = [...sessionsArray]
           this.filterSessions()
         } else {
           this.sessions = []
@@ -1013,17 +1138,33 @@ export default {
       })
     },
 
-    loadArchivedSessions() {
+    async loadArchivedSessions() {
       const archivedRef = dbRef(db, 'archived-sessions')
-      onValue(archivedRef, (snapshot) => {
+      onValue(archivedRef, async (snapshot) => {
         const data = snapshot.val()
         if (data) {
-          this.archivedSessions = Object.keys(data)
-            .map((key) => ({
-              id: key,
-              ...data[key]
-            }))
-            .sort((a, b) => b.archivedAt - a.archivedAt)
+          // Create an array of archived sessions with basic data
+          const archivedArray = Object.keys(data).map((key) => ({
+            id: key,
+            ...data[key]
+          }))
+
+          // Sort by archived timestamp
+          archivedArray.sort((a, b) => b.archivedAt - a.archivedAt)
+
+          // Set archived sessions array immediately for UI responsiveness
+          this.archivedSessions = archivedArray
+          this.filterArchivedSessions()
+
+          // Then compute accurate attendee counts in the background
+          for (const session of archivedArray) {
+            const count = await this.getDirectAttendeeCount(session.id, true)
+            // Update the session with the accurate count
+            session.attendeeCount = count
+          }
+
+          // Update the archived sessions array with the new counts
+          this.archivedSessions = [...archivedArray]
           this.filterArchivedSessions()
         } else {
           this.archivedSessions = []
@@ -1407,22 +1548,89 @@ export default {
 
     getAttendeeCount(session) {
       // Check if attendees property exists
-      if (!session.attendees) {
+      if (!session || !session.attendees) {
         return 0
       }
 
-      // If attendees is an object, count its keys
-      if (typeof session.attendees === 'object' && !Array.isArray(session.attendees)) {
-        return Object.keys(session.attendees).length
+      try {
+        // If attendees is an object (key-value pairs)
+        if (typeof session.attendees === 'object' && !Array.isArray(session.attendees)) {
+          // Extract unique user IDs from the keys
+          const uniqueUserIds = new Set()
+
+          Object.keys(session.attendees).forEach((key) => {
+            // Keys might be in format "userId_timestamp" or just plain objects with userId property
+            const attendee = session.attendees[key]
+
+            if (typeof attendee === 'object' && attendee.userId) {
+              // If the attendee object has a userId property, use that
+              uniqueUserIds.add(attendee.userId)
+            } else {
+              // Otherwise try to extract userId from the key (format: userId_timestamp)
+              const userId = key.split('_')[0]
+              if (userId) {
+                uniqueUserIds.add(userId)
+              }
+            }
+          })
+
+          return uniqueUserIds.size
+        }
+
+        // If attendees is an array
+        if (Array.isArray(session.attendees)) {
+          const uniqueUserIds = new Set(
+            session.attendees.filter((attendee) => attendee && attendee.userId).map((attendee) => attendee.userId)
+          )
+          return uniqueUserIds.size
+        }
+
+        // If attendees is a number (count)
+        if (typeof session.attendees === 'number') {
+          return session.attendees
+        }
+      } catch (error) {
+        console.error('Error counting attendees:', error)
       }
 
-      // If attendees is an array, return its length
-      if (Array.isArray(session.attendees)) {
-        return session.attendees.length
-      }
-
-      // Default case
+      // Default case or error
       return 0
+    },
+
+    async getDirectAttendeeCount(sessionId, isArchived = false) {
+      try {
+        const path = isArchived
+          ? `archived-sessions/${sessionId}/attendees`
+          : `attendance-sessions/${sessionId}/attendees`
+
+        const attendeesRef = dbRef(db, path)
+        const snapshot = await get(attendeesRef)
+
+        if (!snapshot.exists()) {
+          return 0
+        }
+
+        const attendees = snapshot.val()
+        const uniqueUserIds = new Set()
+
+        // Process each attendee entry
+        Object.entries(attendees).forEach(([key, attendee]) => {
+          if (attendee && attendee.userId) {
+            uniqueUserIds.add(attendee.userId)
+          } else {
+            // Try to extract userId from the key (format: userId_timestamp)
+            const userId = key.split('_')[0]
+            if (userId) {
+              uniqueUserIds.add(userId)
+            }
+          }
+        })
+
+        return uniqueUserIds.size
+      } catch (error) {
+        console.error('Error getting direct attendee count:', error)
+        return 0
+      }
     },
 
     getSessionTypeDisplay(type) {
@@ -1449,13 +1657,23 @@ export default {
       const snapshot = await get(attendeesRef)
 
       if (snapshot.exists()) {
-        // First, collect all attendees
+        // First, collect all attendees by user ID
         const attendeesByUser = {}
+        const rawAttendees = snapshot.val()
 
-        Object.entries(snapshot.val()).forEach(([key, attendeeData]) => {
-          const userId = attendeeData.userId
+        // Store the raw count for debugging
+        const rawCount = Object.keys(rawAttendees).length
+        console.log(`Raw attendee entries: ${rawCount}`)
 
-          if (!userId) return
+        // Process each attendee entry
+        Object.entries(rawAttendees).forEach(([key, attendeeData]) => {
+          // Try to get userId from the attendee data or from the key
+          const userId = attendeeData.userId || key.split('_')[0]
+
+          if (!userId) {
+            console.log(`No userId found for key: ${key}`)
+            return
+          }
 
           if (!attendeesByUser[userId]) {
             attendeesByUser[userId] = []
@@ -1464,7 +1682,7 @@ export default {
           attendeesByUser[userId].push({
             key,
             ...attendeeData,
-            location: attendeeData.location || 'Office', // Ensure location exists
+            location: attendeeData.location || 'Office',
             mapsUrl:
               attendeeData.mapsUrl ||
               (attendeeData.coordinates
@@ -1473,7 +1691,17 @@ export default {
           })
         })
 
-        // Then, process each user's records to combine check-in/check-out
+        // Log the unique user count
+        const uniqueUserCount = Object.keys(attendeesByUser).length
+        console.log(`Unique users: ${uniqueUserCount}`)
+
+        // Update the session's attendee count for consistency
+        if (session.attendeeCount !== uniqueUserCount) {
+          console.log(`Updating session attendee count from ${session.attendeeCount} to ${uniqueUserCount}`)
+          session.attendeeCount = uniqueUserCount
+        }
+
+        // Process each user's records
         this.sessionAttendees = Object.values(attendeesByUser)
           .map((records) => {
             // Sort records by timestamp
@@ -1494,6 +1722,22 @@ export default {
                 ? lastRecord.remote
                   ? lastRecord.location || 'Remote'
                   : 'Office'
+                : null
+
+            // Get map URLs for in and out
+            const mapUrlIn = firstRecord.remote
+              ? firstRecord.mapsUrl ||
+                (firstRecord.coordinates
+                  ? `https://www.google.com/maps?q=${firstRecord.coordinates.latitude},${firstRecord.coordinates.longitude}`
+                  : null)
+              : null
+
+            const mapUrlOut =
+              lastRecord && lastRecord !== firstRecord && lastRecord.remote
+                ? lastRecord.mapsUrl ||
+                  (lastRecord.coordinates
+                    ? `https://www.google.com/maps?q=${lastRecord.coordinates.latitude},${lastRecord.coordinates.longitude}`
+                    : null)
                 : null
 
             if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
@@ -1520,6 +1764,8 @@ export default {
               location: firstRecord.location || 'Office', // Keep original location for backward compatibility
               locationIn: locationIn,
               locationOut: locationOut,
+              mapUrlIn: mapUrlIn,
+              mapUrlOut: mapUrlOut,
               coordinates: firstRecord.coordinates,
               mapsUrl: firstRecord.mapsUrl,
               // Store details of both records for reference
@@ -1531,9 +1777,15 @@ export default {
 
         // Initialize filtered attendees
         this.filteredModalAttendees = [...this.sessionAttendees]
+
+        // Log the final processed count
+        console.log(`Processed attendees: ${this.sessionAttendees.length}`)
       } else {
         this.sessionAttendees = []
         this.filteredModalAttendees = []
+
+        // Update the session's attendee count
+        session.attendeeCount = 0
       }
     },
 
@@ -1907,22 +2159,18 @@ export default {
         'In Time',
         'In Type',
         'Location In',
+        'Map URL In',
         'Out Time',
         'Out Type',
         'Location Out',
-        'Attendance Type',
-        'Maps Link'
+        'Map URL Out',
+        'Attendance Type'
       ]
 
       // Use all filtered data, not just the current page
       let csvContent = headers.join(',') + '\n'
 
       this.filteredData.forEach((attendee, index) => {
-        const mapsUrl =
-          (attendee.remote || attendee.mixed) && (attendee.mapsUrl || this.hasCoordinates(attendee))
-            ? attendee.mapsUrl || this.getGoogleMapsUrl(attendee)
-            : ''
-
         const inType = attendee.mixed
           ? attendee.firstScanDetails.remote
             ? 'Remote'
@@ -1947,11 +2195,12 @@ export default {
           this.formatTime(attendee.inTime),
           inType,
           attendee.locationIn || 'Office',
+          attendee.mapUrlIn || '',
           attendee.outTime ? this.formatTime(attendee.outTime) : 'Pending',
           outType,
           attendee.locationOut || (attendee.outTime ? 'Office' : ''),
-          attendanceType,
-          mapsUrl
+          attendee.mapUrlOut || '',
+          attendanceType
         ]
 
         // Escape fields that might contain commas
@@ -1977,9 +2226,11 @@ export default {
         'In Time',
         'In Type',
         'Location In',
+        'Map URL In',
         'Out Time',
         'Out Type',
         'Location Out',
+        'Map URL Out',
         'Attendance Type'
       ]
 
@@ -1997,9 +2248,11 @@ export default {
           this.formatTime(attendee.inTime || attendee.timestamp),
           inType,
           attendee.locationIn || (attendee.remote ? attendee.location : 'Office'),
+          attendee.mapUrlIn || '',
           attendee.outTime ? this.formatTime(attendee.outTime) : 'Pending',
           outType,
           attendee.locationOut || (attendee.outTime ? 'Office' : ''),
+          attendee.mapUrlOut || '',
           attendanceType
         ]
 
@@ -2634,6 +2887,15 @@ tr:nth-child(even) {
   font-size: 16px;
 }
 
+/* Make the table more responsive with the additional columns */
+@media (max-width: 1200px) {
+  .sortable-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
 @media (max-width: 768px) {
   .session-details {
     flex-direction: column;
@@ -2814,15 +3076,28 @@ tr:nth-child(even) {
 
 /* Make the session details table more compact for the additional columns */
 .session-details-modal table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 0.9em;
 }
 
 .session-details-modal th,
 .session-details-modal td {
   padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
 }
 
-/* Add responsive styles for mobile */
+.session-details-modal th {
+  background-color: #f2f2f2;
+  font-weight: bold;
+}
+
+.session-details-modal tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+/* Make the table scrollable horizontally on smaller screens */
 @media (max-width: 1200px) {
   .session-details-modal table {
     display: block;
