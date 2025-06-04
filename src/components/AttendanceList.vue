@@ -11,8 +11,25 @@
     <!-- Daily Attendance Tab -->
     <div v-if="activeTab === 'daily'">
       <div class="filters">
-        <label for="date-select">Select Date:</label>
-        <input type="date" id="date-select" v-model="selectedDate" @change="loadDailyAttendance" />
+        <div class="date-selector">
+          <label for="date-select">Select Date:</label>
+          <input type="date" id="date-select" v-model="selectedDate" @change="loadDailyAttendance" />
+        </div>
+
+        <div class="month-selector">
+          <label for="month-select">Or Export by Month:</label>
+          <div class="month-select-controls">
+            <select id="month-select" v-model="selectedExportMonth">
+              <option value="">Select Month</option>
+              <option v-for="month in availableMonths" :key="month.value" :value="month.value">
+                {{ month.label }}
+              </option>
+            </select>
+            <button @click="exportMonthToCSV" class="export-month-btn" :disabled="!selectedExportMonth">
+              Export Month
+            </button>
+          </div>
+        </div>
       </div>
 
       <div v-if="selectedDate && attendees.length > 0" class="records">
@@ -511,7 +528,11 @@ export default {
       pendingActionData: null,
 
       selectedArchivedSessions: [],
-      selectedActiveSessions: []
+      selectedActiveSessions: [],
+      selectedExportMonth: '',
+      availableMonths: [],
+      monthlyAttendanceData: {},
+      isLoadingMonthData: false
     }
   },
   computed: {
@@ -555,8 +576,248 @@ export default {
     this.loadDailyAttendance()
     this.loadSessions()
     this.loadArchivedSessions()
+    this.loadAvailableMonths()
   },
   methods: {
+    async loadAvailableMonths() {
+      try {
+        // Get reference to daily-attendance
+        const attendanceRef = dbRef(db, 'daily-attendance')
+        const snapshot = await get(attendanceRef)
+
+        if (snapshot.exists()) {
+          const dates = Object.keys(snapshot.val())
+          const months = new Set()
+
+          // Extract unique months from dates
+          dates.forEach((dateStr) => {
+            // Changed variable name from 'date' to 'dateStr'
+            const [year, month] = dateStr.split('-')
+            const monthValue = `${year}-${month}`
+            const monthDate = new Date(year, parseInt(month) - 1, 1) // Changed variable name from 'date' to 'monthDate'
+            const monthLabel = monthDate.toLocaleString('default', { month: 'long', year: 'numeric' })
+
+            months.add(JSON.stringify({ value: monthValue, label: monthLabel }))
+          })
+
+          // Convert to array and sort (newest first)
+          this.availableMonths = Array.from(months)
+            .map((month) => JSON.parse(month))
+            .sort((a, b) => b.value.localeCompare(a.value))
+        } else {
+          this.availableMonths = []
+        }
+      } catch (error) {
+        console.error('Error loading available months:', error)
+        this.availableMonths = []
+      }
+    },
+
+    async exportMonthToCSV() {
+      if (!this.selectedExportMonth) return
+
+      this.isLoadingMonthData = true
+      const toast = useToast()
+
+      try {
+        const [year, month] = this.selectedExportMonth.split('-')
+        const monthLabel = new Date(year, parseInt(month) - 1, 1).toLocaleString('default', {
+          month: 'long',
+          year: 'numeric'
+        })
+
+        // Show loading toast
+        toast.info(`Loading attendance data for ${monthLabel}...`, {
+          position: 'top-center',
+          timeout: false,
+          closeOnClick: false,
+          draggable: false,
+          id: 'loading-month-data'
+        })
+
+        // Get last day of month
+        const lastDay = new Date(year, month, 0).getDate()
+
+        // Fetch all attendance records for the month
+        const monthlyData = {}
+        const promises = []
+
+        // Create array of dates in the month
+        const dates = []
+        for (let day = 1; day <= lastDay; day++) {
+          const date = `${year}-${month}-${day.toString().padStart(2, '0')}`
+          dates.push(date)
+        }
+
+        // Fetch attendance data for each date
+        for (const date of dates) {
+          const promise = get(dbRef(db, `daily-attendance/${date}`))
+            .then((snapshot) => {
+              if (snapshot.exists()) {
+                monthlyData[date] = snapshot.val()
+              }
+            })
+            .catch((error) => {
+              console.error(`Error fetching data for ${date}:`, error)
+            })
+
+          promises.push(promise)
+        }
+
+        // Wait for all fetches to complete
+        await Promise.all(promises)
+
+        // Process the data
+        const processedData = this.processMonthlyAttendanceData(monthlyData)
+
+        // Generate CSV
+        if (processedData.length > 0) {
+          const headers = ['Date', 'Email', 'In Time', 'In Type', 'Out Time', 'Out Type', 'Attendance Type', 'Location']
+
+          let csvContent = headers.join(',') + '\n'
+
+          processedData.forEach((record) => {
+            const row = [
+              record.date,
+              record.email,
+              this.formatTime(record.inTime),
+              record.inType,
+              record.outTime ? this.formatTime(record.outTime) : 'Pending',
+              record.outType || '',
+              record.attendanceType,
+              record.location
+            ]
+
+            // Escape fields that might contain commas
+            const escapedRow = row.map((field) => {
+              if (field && typeof field === 'string' && (field.includes(',') || field.includes('"'))) {
+                return `"${field.replace(/"/g, '""')}"`
+              }
+              return field
+            })
+
+            csvContent += escapedRow.join(',') + '\n'
+          })
+
+          // Download the CSV
+          this.downloadCSV(csvContent, `Attendance_${monthLabel.replace(' ', '_')}.csv`)
+
+          // Show success toast
+          toast.dismiss('loading-month-data')
+          toast.success(`Exported ${processedData.length} attendance records for ${monthLabel}`, {
+            position: 'top-center',
+            duration: 3000
+          })
+        } else {
+          toast.dismiss('loading-month-data')
+          toast.warning(`No attendance records found for ${monthLabel}`, {
+            position: 'top-center',
+            duration: 3000
+          })
+        }
+      } catch (error) {
+        console.error('Error exporting monthly data:', error)
+        toast.dismiss('loading-month-data')
+        toast.error(`Failed to export monthly data: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
+      } finally {
+        this.isLoadingMonthData = false
+      }
+    },
+
+    processMonthlyAttendanceData(monthlyData) {
+      const processedRecords = []
+
+      // Process each date
+      for (const date in monthlyData) {
+        const dateData = monthlyData[date]
+
+        // Group by user ID to combine check-in/check-out
+        const userMap = new Map()
+
+        // First pass: collect all records for each user
+        for (const recordId in dateData) {
+          const record = dateData[recordId]
+          if (!record.userId) continue
+
+          if (!userMap.has(record.userId)) {
+            userMap.set(record.userId, [])
+          }
+          userMap.get(record.userId).push({
+            ...record,
+            id: recordId
+          })
+        }
+
+        // Second pass: process each user's records for this date
+        // Use .forEach instead of for...of to avoid the unused variable
+        userMap.forEach((records) => {
+          // Sort records by timestamp
+          records.sort((a, b) => a.timestamp - b.timestamp)
+
+          // Get first and last record
+          const firstRecord = records[0]
+          const lastRecord = records.length > 1 ? records[records.length - 1] : null
+
+          // Determine attendance type
+          let attendanceType = 'Office'
+          let inType = 'Office'
+          let outType = 'Office'
+          let location = 'Office'
+
+          if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
+            // Both records are remote or only first scan exists and is remote
+            attendanceType = 'Remote'
+            inType = 'Remote'
+            outType = lastRecord ? 'Remote' : ''
+            location = firstRecord.location || 'Remote'
+          } else if (!firstRecord.remote && lastRecord && !lastRecord.remote) {
+            // Both records are office
+            attendanceType = 'Office'
+            inType = 'Office'
+            outType = 'Office'
+            location = 'Office'
+          } else if (firstRecord && lastRecord) {
+            // Mixed: one scan is remote, one is office
+            attendanceType = 'Mixed'
+            inType = firstRecord.remote ? 'Remote' : 'Office'
+            outType = lastRecord.remote ? 'Remote' : 'Office'
+
+            // For mixed, prioritize showing remote location
+            if (firstRecord.remote) {
+              location = firstRecord.location || 'Remote'
+            } else if (lastRecord.remote) {
+              location = lastRecord.location || 'Remote'
+            }
+          }
+
+          // Add to processed records
+          processedRecords.push({
+            date: date,
+            email: firstRecord.email,
+            inTime: firstRecord.timestamp,
+            outTime: lastRecord && lastRecord !== firstRecord ? lastRecord.timestamp : null,
+            attendanceType: attendanceType,
+            inType: inType,
+            outType: outType,
+            location: location
+          })
+        })
+      }
+
+      // Sort by date and then by email
+      return processedRecords.sort((a, b) => {
+        // First sort by date
+        const dateComparison = a.date.localeCompare(b.date)
+        if (dateComparison !== 0) return dateComparison
+
+        // Then by email
+        return a.email.localeCompare(b.email)
+      })
+    },
+
     async loadDailyAttendance() {
       if (!this.selectedDate) {
         this.attendees = []
@@ -1617,6 +1878,45 @@ export default {
 .filters,
 .session-filters {
   margin-bottom: 20px;
+}
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.date-selector,
+.month-selector {
+  flex: 1;
+  min-width: 250px;
+}
+
+.month-select-controls {
+  display: flex;
+  gap: 10px;
+}
+
+.month-select-controls select {
+  flex: 1;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.export-month-btn {
+  background-color: #4caf50;
+  color: white;
+  padding: 8px 15px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.export-month-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }
 
 .session-filters {
