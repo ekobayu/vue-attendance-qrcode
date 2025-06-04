@@ -63,14 +63,17 @@
               <th @click="sortTable('inTime')" :class="getSortClass('inTime')">
                 In Time <span class="sort-icon">{{ getSortIcon('inTime') }}</span>
               </th>
+              <th @click="sortTable('locationIn')" :class="getSortClass('locationIn')">
+                Location In <span class="sort-icon">{{ getSortIcon('locationIn') }}</span>
+              </th>
               <th @click="sortTable('outTime')" :class="getSortClass('outTime')">
                 Out Time <span class="sort-icon">{{ getSortIcon('outTime') }}</span>
               </th>
+              <th @click="sortTable('locationOut')" :class="getSortClass('locationOut')">
+                Location Out <span class="sort-icon">{{ getSortIcon('locationOut') }}</span>
+              </th>
               <th @click="sortTable('remote')" :class="getSortClass('remote')">
                 Type <span class="sort-icon">{{ getSortIcon('remote') }}</span>
-              </th>
-              <th @click="sortTable('location')" :class="getSortClass('location')">
-                Location <span class="sort-icon">{{ getSortIcon('location') }}</span>
               </th>
               <th v-if="hasRemoteAttendees">Map</th>
               <th>Actions</th>
@@ -90,6 +93,7 @@
                   {{ attendee.firstScanDetails.remote ? 'Remote' : 'Office' }}
                 </span>
               </td>
+              <td>{{ attendee.locationIn || 'Office' }}</td>
               <td>
                 <span v-if="attendee.outTime">
                   {{ formatTime(attendee.outTime) }}
@@ -103,12 +107,12 @@
                 </span>
                 <span v-else class="pending-badge">Pending</span>
               </td>
+              <td>{{ attendee.locationOut || (attendee.outTime ? 'Office' : '') }}</td>
               <td>
                 <span :class="attendee.badgeType">
                   {{ attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office' }}
                 </span>
               </td>
-              <td>{{ attendee.location }}</td>
               <td v-if="hasRemoteAttendees">
                 <a
                   v-if="(attendee.remote || attendee.mixed) && (attendee.mapsUrl || hasCoordinates(attendee))"
@@ -401,9 +405,13 @@
               <tr>
                 <th>#</th>
                 <th>Email</th>
-                <th>Time</th>
+                <th>In Time</th>
+                <th>In Type</th>
+                <th>Location In</th>
+                <th>Out Time</th>
+                <th>Out Type</th>
+                <th>Location Out</th>
                 <th>Type</th>
-                <th>Location</th>
                 <th>Map</th>
                 <th>Actions</th>
               </tr>
@@ -412,16 +420,28 @@
               <tr v-for="(attendee, index) in filteredModalAttendees" :key="index">
                 <td>{{ index + 1 }}</td>
                 <td>{{ attendee.email }}</td>
-                <td>{{ formatTime(attendee.timestamp) }}</td>
+                <td>{{ formatTime(attendee.inTime || attendee.timestamp) }}</td>
                 <td>
-                  <span :class="attendee.remote ? 'remote-badge' : 'in-person-badge'">
-                    {{ attendee.remote ? 'Remote' : 'Office' }}
+                  <span :class="getInTypeBadgeClass(attendee)">
+                    {{ getInType(attendee) }}
                   </span>
                 </td>
-                <td>{{ attendee.remote ? attendee.location : 'Office' }}</td>
+                <td>{{ attendee.locationIn || (attendee.remote ? attendee.location : 'Office') }}</td>
+                <td>{{ attendee.outTime ? formatTime(attendee.outTime) : 'Pending' }}</td>
+                <td>
+                  <span v-if="attendee.outTime" :class="getOutTypeBadgeClass(attendee)">
+                    {{ getOutType(attendee) }}
+                  </span>
+                </td>
+                <td>{{ attendee.locationOut || (attendee.outTime ? 'Office' : '') }}</td>
+                <td>
+                  <span :class="getAttendanceTypeBadgeClass(attendee)">
+                    {{ getAttendanceType(attendee) }}
+                  </span>
+                </td>
                 <td>
                   <a
-                    v-if="attendee.remote && (attendee.mapsUrl || hasCoordinates(attendee))"
+                    v-if="(attendee.remote || attendee.mixed) && (attendee.mapsUrl || hasCoordinates(attendee))"
                     :href="attendee.mapsUrl || getGoogleMapsUrl(attendee)"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -672,7 +692,17 @@ export default {
 
         // Generate CSV
         if (processedData.length > 0) {
-          const headers = ['Date', 'Email', 'In Time', 'In Type', 'Out Time', 'Out Type', 'Attendance Type', 'Location']
+          const headers = [
+            'Date',
+            'Email',
+            'In Time',
+            'In Type',
+            'Location In',
+            'Out Time',
+            'Out Type',
+            'Location Out',
+            'Attendance Type'
+          ]
 
           let csvContent = headers.join(',') + '\n'
 
@@ -682,10 +712,11 @@ export default {
               record.email,
               this.formatTime(record.inTime),
               record.inType,
+              record.locationIn || 'Office',
               record.outTime ? this.formatTime(record.outTime) : 'Pending',
               record.outType || '',
-              record.attendanceType,
-              record.location
+              record.locationOut || (record.outTime ? 'Office' : ''),
+              record.attendanceType
             ]
 
             // Escape fields that might contain commas
@@ -752,7 +783,6 @@ export default {
         }
 
         // Second pass: process each user's records for this date
-        // Use .forEach instead of for...of to avoid the unused variable
         userMap.forEach((records) => {
           // Sort records by timestamp
           records.sort((a, b) => a.timestamp - b.timestamp)
@@ -766,6 +796,15 @@ export default {
           let inType = 'Office'
           let outType = 'Office'
           let location = 'Office'
+
+          // Get specific locations for in and out
+          const locationIn = firstRecord.remote ? firstRecord.location || 'Remote' : 'Office'
+          const locationOut =
+            lastRecord && lastRecord !== firstRecord
+              ? lastRecord.remote
+                ? lastRecord.location || 'Remote'
+                : 'Office'
+              : null
 
           if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
             // Both records are remote or only first scan exists and is remote
@@ -802,7 +841,9 @@ export default {
             attendanceType: attendanceType,
             inType: inType,
             outType: outType,
-            location: location
+            location: location,
+            locationIn: locationIn,
+            locationOut: locationOut
           })
         })
       }
@@ -886,6 +927,15 @@ export default {
         let badgeType = 'in-person-badge'
         let location = 'Office'
 
+        // Get specific locations for in and out
+        const locationIn = firstRecord.remote ? firstRecord.location || 'Remote' : 'Office'
+        const locationOut =
+          lastRecord && lastRecord !== firstRecord
+            ? lastRecord.remote
+              ? lastRecord.location || 'Remote'
+              : 'Office'
+            : null
+
         if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
           // Both records are remote or only first scan exists and is remote
           attendanceType = 'remote'
@@ -919,6 +969,8 @@ export default {
           mixed: attendanceType === 'mixed',
           badgeType: badgeType,
           location: location,
+          locationIn: locationIn,
+          locationOut: locationOut,
           coordinates: firstRecord.remote
             ? firstRecord.coordinates
             : lastRecord && lastRecord.remote
@@ -1253,7 +1305,13 @@ export default {
       } else {
         this.sortKey = key
         // Default sort order based on column
-        if (key === 'email' || key === 'location' || key === 'sessionType') {
+        if (
+          key === 'email' ||
+          key === 'location' ||
+          key === 'locationIn' ||
+          key === 'locationOut' ||
+          key === 'sessionType'
+        ) {
           this.sortOrder = 'asc'
         } else {
           this.sortOrder = 'desc'
@@ -1272,7 +1330,9 @@ export default {
         filtered = filtered.filter(
           (attendee) =>
             (attendee.email && attendee.email.toLowerCase().includes(query)) ||
-            (attendee.location && attendee.location.toLowerCase().includes(query))
+            (attendee.location && attendee.location.toLowerCase().includes(query)) ||
+            (attendee.locationIn && attendee.locationIn.toLowerCase().includes(query)) ||
+            (attendee.locationOut && attendee.locationOut.toLowerCase().includes(query))
         )
       }
 
@@ -1310,6 +1370,21 @@ export default {
             break
           case 'location':
             comparison = (a.location || '').localeCompare(b.location || '')
+            break
+          case 'locationIn':
+            comparison = (a.locationIn || '').localeCompare(b.locationIn || '')
+            break
+          case 'locationOut':
+            // Handle null locationOut values
+            if (!a.locationOut && !b.locationOut) {
+              comparison = 0
+            } else if (!a.locationOut) {
+              comparison = 1 // Null values come last in ascending order
+            } else if (!b.locationOut) {
+              comparison = -1
+            } else {
+              comparison = a.locationOut.localeCompare(b.locationOut)
+            }
             break
           default:
             comparison = 0
@@ -1374,20 +1449,82 @@ export default {
       const snapshot = await get(attendeesRef)
 
       if (snapshot.exists()) {
-        this.sessionAttendees = Object.keys(snapshot.val())
-          .map((userId) => {
-            const attendeeData = snapshot.val()[userId]
-            return {
-              userId,
-              ...attendeeData,
-              location: attendeeData.location || 'Office', // Ensure location exists
+        // First, collect all attendees
+        const attendeesByUser = {}
 
-              // Ensure mapsUrl exists if coordinates are available but no mapsUrl
-              mapsUrl:
-                attendeeData.mapsUrl ||
-                (attendeeData.coordinates
-                  ? `https://www.google.com/maps?q=${attendeeData.coordinates.latitude},${attendeeData.coordinates.longitude}`
-                  : null)
+        Object.entries(snapshot.val()).forEach(([key, attendeeData]) => {
+          const userId = attendeeData.userId
+
+          if (!userId) return
+
+          if (!attendeesByUser[userId]) {
+            attendeesByUser[userId] = []
+          }
+
+          attendeesByUser[userId].push({
+            key,
+            ...attendeeData,
+            location: attendeeData.location || 'Office', // Ensure location exists
+            mapsUrl:
+              attendeeData.mapsUrl ||
+              (attendeeData.coordinates
+                ? `https://www.google.com/maps?q=${attendeeData.coordinates.latitude},${attendeeData.coordinates.longitude}`
+                : null)
+          })
+        })
+
+        // Then, process each user's records to combine check-in/check-out
+        this.sessionAttendees = Object.values(attendeesByUser)
+          .map((records) => {
+            // Sort records by timestamp
+            records.sort((a, b) => a.timestamp - b.timestamp)
+
+            // Get first and last record
+            const firstRecord = records[0]
+            const lastRecord = records.length > 1 ? records[records.length - 1] : null
+
+            // Determine attendance type
+            let attendanceType = 'Office'
+            let mixed = false
+
+            // Get specific locations for in and out
+            const locationIn = firstRecord.remote ? firstRecord.location || 'Remote' : 'Office'
+            const locationOut =
+              lastRecord && lastRecord !== firstRecord
+                ? lastRecord.remote
+                  ? lastRecord.location || 'Remote'
+                  : 'Office'
+                : null
+
+            if (firstRecord.remote && (!lastRecord || lastRecord.remote)) {
+              // Both records are remote or only first scan exists and is remote
+              attendanceType = 'Remote'
+            } else if (!firstRecord.remote && lastRecord && !lastRecord.remote) {
+              // Both records are office
+              attendanceType = 'Office'
+            } else if (firstRecord && lastRecord && firstRecord.remote !== lastRecord.remote) {
+              // Mixed: one scan is remote, one is office
+              attendanceType = 'Mixed'
+              mixed = true
+            }
+
+            return {
+              userId: firstRecord.userId,
+              email: firstRecord.email,
+              timestamp: firstRecord.timestamp, // Keep original timestamp for backward compatibility
+              inTime: firstRecord.timestamp,
+              outTime: lastRecord && lastRecord !== firstRecord ? lastRecord.timestamp : null,
+              remote: attendanceType === 'Remote',
+              mixed: mixed,
+              attendanceType: attendanceType,
+              location: firstRecord.location || 'Office', // Keep original location for backward compatibility
+              locationIn: locationIn,
+              locationOut: locationOut,
+              coordinates: firstRecord.coordinates,
+              mapsUrl: firstRecord.mapsUrl,
+              // Store details of both records for reference
+              firstScanDetails: firstRecord,
+              secondScanDetails: lastRecord
             }
           })
           .sort((a, b) => a.timestamp - b.timestamp)
@@ -1725,6 +1862,42 @@ export default {
       return new Date(timestamp).toLocaleString()
     },
 
+    getInType(attendee) {
+      if (attendee.inType) return attendee.inType
+      if (attendee.mixed) return attendee.firstScanDetails.remote ? 'Remote' : 'Office'
+      return attendee.remote ? 'Remote' : 'Office'
+    },
+
+    getOutType(attendee) {
+      if (attendee.outType) return attendee.outType
+      if (attendee.mixed && attendee.secondScanDetails) {
+        return attendee.secondScanDetails.remote ? 'Remote' : 'Office'
+      }
+      return attendee.remote ? 'Remote' : 'Office'
+    },
+
+    getAttendanceType(attendee) {
+      if (attendee.attendanceType) return attendee.attendanceType
+      if (attendee.mixed) return 'Mixed'
+      return attendee.remote ? 'Remote' : 'Office'
+    },
+
+    getInTypeBadgeClass(attendee) {
+      const inType = this.getInType(attendee)
+      return inType === 'Remote' ? 'remote-mini' : 'office-mini'
+    },
+
+    getOutTypeBadgeClass(attendee) {
+      const outType = this.getOutType(attendee)
+      return outType === 'Remote' ? 'remote-mini' : 'office-mini'
+    },
+
+    getAttendanceTypeBadgeClass(attendee) {
+      const type = this.getAttendanceType(attendee)
+      if (type === 'Mixed') return 'mixed-badge'
+      return type === 'Remote' ? 'remote-badge' : 'in-person-badge'
+    },
+
     exportToCSV() {
       if (!this.uniqueAttendees.length) return
 
@@ -1733,10 +1906,11 @@ export default {
         'Email',
         'In Time',
         'In Type',
+        'Location In',
         'Out Time',
         'Out Type',
+        'Location Out',
         'Attendance Type',
-        'Location',
         'Maps Link'
       ]
 
@@ -1772,10 +1946,11 @@ export default {
           attendee.email,
           this.formatTime(attendee.inTime),
           inType,
+          attendee.locationIn || 'Office',
           attendee.outTime ? this.formatTime(attendee.outTime) : 'Pending',
           outType,
+          attendee.locationOut || (attendee.outTime ? 'Office' : ''),
           attendanceType,
-          attendee.location,
           mapsUrl
         ]
 
@@ -1796,24 +1971,36 @@ export default {
     exportSessionToCSV() {
       if (!this.sessionAttendees.length || !this.selectedSession) return
 
-      const headers = ['No', 'Email', 'Time', 'Type', 'Location', 'Maps Link']
+      const headers = [
+        'No',
+        'Email',
+        'In Time',
+        'In Type',
+        'Location In',
+        'Out Time',
+        'Out Type',
+        'Location Out',
+        'Attendance Type'
+      ]
 
       let csvContent = headers.join(',') + '\n'
 
       // Use filtered modal attendees
       this.filteredModalAttendees.forEach((attendee, index) => {
-        const mapsUrl =
-          attendee.remote && (attendee.mapsUrl || this.hasCoordinates(attendee))
-            ? attendee.mapsUrl || this.getGoogleMapsUrl(attendee)
-            : ''
+        const inType = this.getInType(attendee)
+        const outType = attendee.outTime ? this.getOutType(attendee) : ''
+        const attendanceType = this.getAttendanceType(attendee)
 
         const row = [
           index + 1,
           attendee.email,
-          this.formatTime(attendee.timestamp),
-          attendee.remote ? 'Remote' : 'Office',
-          attendee.remote ? attendee.location : 'Office',
-          mapsUrl
+          this.formatTime(attendee.inTime || attendee.timestamp),
+          inType,
+          attendee.locationIn || (attendee.remote ? attendee.location : 'Office'),
+          attendee.outTime ? this.formatTime(attendee.outTime) : 'Pending',
+          outType,
+          attendee.locationOut || (attendee.outTime ? 'Office' : ''),
+          attendanceType
         ]
 
         // Escape fields that might contain commas
@@ -2604,5 +2791,43 @@ tr:nth-child(even) {
 
 .batch-archive-btn:hover {
   background-color: #f57c00;
+}
+
+.mini-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-left: 5px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.remote-mini {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.office-mini {
+  background-color: #e8f5e9;
+  color: #388e3c;
+}
+
+/* Make the session details table more compact for the additional columns */
+.session-details-modal table {
+  font-size: 0.9em;
+}
+
+.session-details-modal th,
+.session-details-modal td {
+  padding: 8px;
+}
+
+/* Add responsive styles for mobile */
+@media (max-width: 1200px) {
+  .session-details-modal table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
 }
 </style>
