@@ -162,7 +162,7 @@
         </div>
 
         <!-- Charts Section -->
-        <div class="charts-section" v-if="!loading && attendanceHistory.length > 1">
+        <!-- <div class="charts-section" v-if="!loading && attendanceHistory.length > 1">
           <h3>Attendance Analytics</h3>
 
           <div class="chart-controls">
@@ -187,7 +187,7 @@
           <div class="not-enough-data">
             <p>You need at least two days of attendance data to view analytics.</p>
           </div>
-        </div>
+        </div> -->
 
         <div class="attendance-stats">
           <div class="stat-card">
@@ -277,14 +277,14 @@ import { auth, db } from '../firebase/config'
 import { onAuthStateChanged } from 'firebase/auth'
 import { ref as dbRef, get } from 'firebase/database'
 import QRCodeScanner from '../components/QRCodeScanner.vue'
-import AttendanceChart from '../components/AttendanceChart.vue'
+// import AttendanceChart from '../components/AttendanceChart.vue'
 import { getTodayDateString } from '@/services/getTodayDateString'
 
 export default {
   name: 'UserPage',
   components: {
-    QRCodeScanner,
-    AttendanceChart
+    QRCodeScanner
+    // AttendanceChart
   },
   data() {
     return {
