@@ -1,17 +1,23 @@
 <template>
   <div id="app">
-    <header v-if="!$route.meta.hideNavigation">
-      <nav v-if="user">
-        <router-link to="/">Home</router-link> |
-        <router-link to="/user">Mark Attendance</router-link>
-        <router-link v-if="isAdmin" to="/admin">| Admin Panel</router-link>
-        <button @click="logout" class="logout-btn">Logout</button>
-      </nav>
-    </header>
-    <router-view @login-success="handleLoginSuccess" />
-    <footer v-if="!$route.meta.hideNavigation">
-      <!-- Footer content -->
-    </footer>
+    <div v-if="authInitialized">
+      <header v-if="!$route.meta.hideNavigation">
+        <nav v-if="user">
+          <router-link to="/">Home</router-link> |
+          <router-link to="/user">Mark Attendance</router-link>
+          <router-link v-if="isAdmin" to="/admin">| Admin Panel</router-link>
+          <button @click="logout" class="logout-btn">Logout</button>
+        </nav>
+      </header>
+      <router-view @login-success="handleLoginSuccess" />
+      <footer v-if="!$route.meta.hideNavigation">
+        <!-- Footer content -->
+      </footer>
+    </div>
+    <div v-else class="loading-auth">
+      <div class="loading-spinner"></div>
+      <p>Loading...</p>
+    </div>
   </div>
 </template>
 
@@ -24,17 +30,18 @@ export default {
   data() {
     return {
       user: null,
-      isAdmin: false
+      isAdmin: false,
+      authInitialized: false
     }
   },
   created() {
     // Listen for auth state changes
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
       if (user) {
         // Only set user if email is verified
         if (user.emailVerified) {
           this.user = user
-          this.checkAdminStatus(user.uid)
+          await this.checkAdminStatus(user.uid)
         } else {
           // If email is not verified, sign out
           // this.logout()
@@ -42,13 +49,10 @@ export default {
       } else {
         this.user = null
         this.isAdmin = false
-
-        // Redirect to login if trying to access protected routes
-        const currentRoute = this.$router.currentRoute
-        if (currentRoute.meta && currentRoute.meta.requiresAuth) {
-          this.$router.push('/')
-        }
       }
+
+      // Mark authentication as initialized
+      this.authInitialized = true
     })
   },
   methods: {
@@ -121,5 +125,32 @@ nav a.router-link-exact-active {
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.loading-auth {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #42b983;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 </style>

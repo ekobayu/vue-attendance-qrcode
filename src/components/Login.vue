@@ -57,8 +57,9 @@
 </template>
 
 <script>
-import { auth } from '../firebase/config'
+import { auth, db } from '../firebase/config'
 import { signInWithEmailAndPassword, sendPasswordResetEmail, sendEmailVerification } from 'firebase/auth'
+import { ref as dbRef, get } from 'firebase/database'
 
 export default {
   name: 'LoginPage',
@@ -75,6 +76,13 @@ export default {
       resetStatus: '',
       resetLoading: false,
       verificationMessage: ''
+    }
+  },
+  created() {
+    // Check if user is already logged in
+    const currentUser = auth.currentUser
+    if (currentUser && currentUser.emailVerified) {
+      this.redirectLoggedInUser(currentUser)
     }
   },
   methods: {
@@ -105,7 +113,9 @@ export default {
 
         // Email is verified, proceed with login
         this.$emit('login-success', user)
-        this.$router.push('/')
+
+        // Redirect user based on their role
+        await this.redirectLoggedInUser(user)
       } catch (error) {
         console.error('Login error:', error)
 
@@ -124,6 +134,44 @@ export default {
         }
       } finally {
         this.loading = false
+      }
+    },
+
+    async redirectLoggedInUser(user) {
+      try {
+        // Check if there's a redirect path stored in session storage
+        const redirectPath = sessionStorage.getItem('redirectAfterLogin')
+
+        if (redirectPath) {
+          // Clear the stored path
+          sessionStorage.removeItem('redirectAfterLogin')
+          // Redirect to the stored path
+          this.$router.push(redirectPath)
+          return
+        }
+
+        // If no redirect path, check if user is admin
+        const userRef = dbRef(db, `users/${user.uid}`)
+        const snapshot = await get(userRef)
+
+        if (snapshot.exists()) {
+          const userData = snapshot.val()
+          const isAdmin = userData && userData.isAdmin === true
+
+          // Redirect based on role
+          if (isAdmin) {
+            this.$router.push('/admin')
+          } else {
+            this.$router.push('/user')
+          }
+        } else {
+          // Default redirect if no user data
+          this.$router.push('/user')
+        }
+      } catch (error) {
+        console.error('Error during redirect:', error)
+        // Default redirect on error
+        this.$router.push('/user')
       }
     },
 
