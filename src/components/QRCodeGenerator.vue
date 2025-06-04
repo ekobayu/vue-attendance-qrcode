@@ -46,8 +46,8 @@
         <h3>Active Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
         <p><strong>Type:</strong> {{ getSessionTypeDisplay(activeSession.type) }}</p>
-        <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
-        <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p>
+        <!-- <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
+        <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p> -->
         <p><strong>Attendees:</strong> {{ attendeeCount }}</p>
         <div class="scan-limit-info">
           <span class="scan-limit-badge">2 Scans Per Day</span><br />
@@ -73,12 +73,12 @@
         <div class="action-buttons">
           <button @click="printQRCode" class="print-btn">Print QR Code</button>
           <button @click="openInNewTab" class="new-tab-btn">Open in New Tab</button>
-          <button @click="refreshQRCode" class="refresh-btn">Refresh QR Code</button>
+          <!-- <button @click="refreshQRCode" class="refresh-btn">Refresh QR Code</button> -->
           <button @click="endSession" class="end-btn">End Session</button>
         </div>
       </div>
 
-      <div class="remote-options">
+      <!-- <div class="remote-options">
         <h3>Remote Work Options</h3>
         <p>Share this link with remote workers:</p>
         <div class="remote-link">
@@ -86,7 +86,7 @@
           <button @click="copyRemoteLink" class="copy-btn">Copy</button>
         </div>
         <p v-if="linkCopied" class="copy-message">Link copied to clipboard!</p>
-      </div>
+      </div> -->
 
       <div class="next-reset" v-if="activeSession.autoReset">
         <h3>Next Automatic Reset</h3>

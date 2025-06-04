@@ -1,7 +1,7 @@
 <template>
   <div class="qr-scanner">
     <!-- Scan Status Display -->
-    <div v-if="todayScans" class="scan-status-display">
+    <!-- <div v-if="todayScans" class="scan-status-display">
       <h3>Today's Attendance</h3>
       <div class="scan-details">
         <div class="scan-row">
@@ -33,7 +33,7 @@
         <span v-if="scanCount >= 2" class="limit-reached">Daily scan limit reached</span>
         <span v-else>{{ 2 - scanCount }} scans remaining today</span>
       </div>
-    </div>
+    </div> -->
 
     <!-- Scanner Controls -->
     <div v-if="!scanning && !attendanceMarked && scanCount < 2">

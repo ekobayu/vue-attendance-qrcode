@@ -21,8 +21,8 @@
           <h3>Session Information</h3>
           <p><strong>Date:</strong> {{ formatDate(session.date) }}</p>
           <p><strong>Type:</strong> {{ getSessionTypeDisplay(session.type) }}</p>
-          <p><strong>Valid from:</strong> {{ formatTime(session.startTime) }}</p>
-          <p><strong>Valid until:</strong> {{ formatTime(session.endTime) }}</p>
+          <!-- <p><strong>Valid from:</strong> {{ formatTime(session.startTime) }}</p>
+          <p><strong>Valid until:</strong> {{ formatTime(session.endTime) }}</p> -->
           <div class="scan-info">
             <p><strong>Scan Limit:</strong> 2 scans per day</p>
             <p>First scan: Check-in | Second scan: Check-out</p>

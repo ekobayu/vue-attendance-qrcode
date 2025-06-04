@@ -67,8 +67,8 @@
         <h3>Active Attendance Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
         <p><strong>Type:</strong> {{ getSessionTypeDisplay(activeSession.type) }}</p>
-        <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
-        <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p>
+        <!-- <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
+        <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p> -->
       </div>
 
       <div v-else class="no-session">
