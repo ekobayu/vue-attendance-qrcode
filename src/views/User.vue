@@ -116,6 +116,7 @@
                     >
                       {{ record.firstScanDetails.remote ? 'Remote' : 'Office' }}
                     </span>
+                    <span class="location-info" v-if="record.locationIn"> @ {{ record.locationIn }} </span>
                   </div>
                   <div class="scan-time" v-if="record.secondScan">
                     <span class="scan-label">Out:</span>
@@ -127,17 +128,13 @@
                     >
                       {{ record.secondScanDetails.remote ? 'Remote' : 'Office' }}
                     </span>
+                    <span class="location-info" v-if="record.locationOut"> @ {{ record.locationOut }} </span>
                   </div>
                 </div>
 
                 <!-- Show badge with type -->
                 <div class="badge" :class="getBadgeClass(record)">
                   {{ getBadgeText(record) }}
-                </div>
-
-                <!-- Show location for remote or mixed attendance -->
-                <div class="location" v-if="(record.remote || record.badgeType === 'mixed') && record.location">
-                  {{ record.location }}
                 </div>
               </div>
             </div>
@@ -245,6 +242,7 @@
                       >
                         {{ record.firstScanDetails.remote ? 'Remote' : 'Office' }}
                       </span>
+                      <span class="location-info" v-if="record.locationIn"> @ {{ record.locationIn }} </span>
                     </div>
                     <div class="scan-time" v-if="record.secondScan">
                       <span class="scan-label">Out:</span>
@@ -256,16 +254,13 @@
                       >
                         {{ record.secondScanDetails.remote ? 'Remote' : 'Office' }}
                       </span>
+                      <span class="location-info" v-if="record.locationOut"> @ {{ record.locationOut }} </span>
                     </div>
                   </div>
 
                   <!-- Update the badge to handle mixed type -->
                   <div class="badge" :class="getBadgeClass(record)">
                     {{ getBadgeText(record) }}
-                  </div>
-
-                  <div class="location" v-if="(record.remote || record.badgeType === 'mixed') && record.location">
-                    {{ record.location }}
                   </div>
                 </div>
               </div>
@@ -623,6 +618,10 @@ export default {
                 let location = ''
                 let badgeType = ''
 
+                // Get specific locations for in and out
+                const locationIn = firstScan.remote ? firstScan.location || 'Remote' : 'Office'
+                const locationOut = secondScan ? (secondScan.remote ? secondScan.location || 'Remote' : 'Office') : null
+
                 if (firstScan.remote && (!secondScan || secondScan.remote)) {
                   // Both scans are remote or only first scan exists and is remote
                   isRemote = true
@@ -650,6 +649,8 @@ export default {
                   timestamp: firstScanTime, // Use first scan time as primary timestamp
                   remote: isRemote,
                   location: location,
+                  locationIn: locationIn,
+                  locationOut: locationOut,
                   sessionType: firstScan.sessionType || '',
                   firstScan: firstScanTime,
                   secondScan: secondScanTime,
@@ -666,6 +667,8 @@ export default {
                 timestamp: dateData.timestamp,
                 remote: dateData.remote || false,
                 location: dateData.remote ? dateData.location || '' : 'Office',
+                locationIn: dateData.remote ? dateData.location || 'Remote' : 'Office',
+                locationOut: null,
                 sessionType: dateData.sessionType || '',
                 firstScan: dateData.timestamp,
                 secondScan: null,
@@ -1611,6 +1614,12 @@ export default {
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
+.location-info {
+  color: #666;
+  font-size: 0.9em;
+  margin-left: 5px;
+}
+
 .scan-item {
   display: flex;
   justify-content: space-between;
@@ -1623,14 +1632,17 @@ export default {
 }
 
 .scan-label {
-  font-weight: bold;
-  color: #333;
+  font-weight: 600;
+  color: #555;
+  margin-right: 2px;
 }
 
 .scan-time {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 5px;
+  font-size: 0.9em;
 }
 
 .scan-badge {
