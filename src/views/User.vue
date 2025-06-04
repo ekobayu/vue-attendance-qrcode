@@ -99,11 +99,45 @@
           <div v-else-if="attendanceHistory.length === 0" class="no-records">You haven't marked attendance yet.</div>
           <div v-else class="history-list">
             <div v-for="(record, index) in recentAttendance" :key="index" class="history-item">
-              <div class="date">{{ formatDateOnly(record.date) }}</div>
+              <div class="date-info">
+                <div class="day-name">{{ getDayName(record.date) }}</div>
+                <div class="date">{{ formatDateShort(record.date) }}</div>
+              </div>
               <div class="record-details">
-                <div class="timestamp">{{ formatTime(record.timestamp) }}</div>
-                <div class="badge" :class="record.remote ? 'remote-badge' : 'in-person-badge'">
-                  {{ record.remote ? 'Remote' : 'Office' }}
+                <!-- Show check-in and check-out times -->
+                <div class="scan-times">
+                  <div class="scan-time" v-if="record.firstScan">
+                    <span class="scan-label">In:</span>
+                    {{ formatTime(record.firstScan) }}
+                    <span
+                      v-if="record.firstScanDetails && record.badgeType === 'mixed'"
+                      class="mini-badge"
+                      :class="record.firstScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                    >
+                      {{ record.firstScanDetails.remote ? 'Remote' : 'Office' }}
+                    </span>
+                  </div>
+                  <div class="scan-time" v-if="record.secondScan">
+                    <span class="scan-label">Out:</span>
+                    {{ formatTime(record.secondScan) }}
+                    <span
+                      v-if="record.secondScanDetails && record.badgeType === 'mixed'"
+                      class="mini-badge"
+                      :class="record.secondScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                    >
+                      {{ record.secondScanDetails.remote ? 'Remote' : 'Office' }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Show badge with type -->
+                <div class="badge" :class="getBadgeClass(record)">
+                  {{ getBadgeText(record) }}
+                </div>
+
+                <!-- Show location for remote or mixed attendance -->
+                <div class="location" v-if="(record.remote || record.badgeType === 'mixed') && record.location">
+                  {{ record.location }}
                 </div>
               </div>
             </div>
@@ -146,7 +180,7 @@
           </div>
 
           <attendance-chart
-            :attendance-data="filteredHistory.length > 0 ? filteredHistory : attendanceHistory"
+            :attendance-data="prepareChartData(filteredHistory.length > 0 ? filteredHistory : attendanceHistory)"
             :chart-type="activeChartType"
             :key="`chart-${activeChartType}-${filteredHistory.length}`"
           />
@@ -361,11 +395,17 @@ export default {
     },
 
     inPersonCount() {
-      return this.filteredHistory.filter((record) => !record.remote).length
+      return this.filteredHistory.filter((record) => {
+        // Count as in-person if it's pure office attendance
+        return !record.remote && record.badgeType !== 'mixed'
+      }).length
     },
 
     remoteCount() {
-      return this.filteredHistory.filter((record) => record.remote).length
+      return this.filteredHistory.filter((record) => {
+        // Count as remote if it's either pure remote or mixed attendance
+        return record.remote || record.badgeType === 'mixed'
+      }).length
     },
 
     currentStreak() {
@@ -447,6 +487,32 @@ export default {
         return 'Office'
       }
     },
+
+    prepareChartData(records) {
+      // Create a deep copy of the records to avoid modifying the original data
+      return records.map((record) => {
+        const newRecord = { ...record }
+
+        // For mixed attendance types, add properties that the chart component can use
+        if (record.badgeType === 'mixed') {
+          newRecord.isMixed = true
+
+          // Determine which scan was remote and which was office
+          const firstScanRemote = record.firstScanDetails && record.firstScanDetails.remote
+          const secondScanRemote = record.secondScanDetails && record.secondScanDetails.remote
+
+          // Add these properties for the chart component to use
+          newRecord.firstScanType = firstScanRemote ? 'remote' : 'office'
+          newRecord.secondScanType = secondScanRemote ? 'remote' : 'office'
+
+          // Set a property to indicate this record should be counted in both categories
+          newRecord.countInBoth = true
+        }
+
+        return newRecord
+      })
+    },
+
     switchTab(tabName) {
       // If switching to history tab, refresh the data
       if (tabName === 'history' && this.activeTab !== 'history') {
@@ -1035,6 +1101,55 @@ export default {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+/* Add these styles to the existing <style> section */
+.history-item .scan-times {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.history-item .scan-time {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.9em;
+}
+
+.history-item .scan-label {
+  font-weight: 600;
+  color: #555;
+}
+
+/* Update the history-item style for the recent attendance section */
+.history-list .history-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+  align-items: flex-start; /* Changed from center to flex-start for better alignment with multiple lines */
+}
+
+/* Make the record details more flexible for the recent attendance section */
+.history-list .record-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Responsive adjustments for the recent attendance section */
+@media (max-width: 600px) {
+  .history-list .history-item {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .history-list .record-details {
+    width: 100%;
+    align-items: flex-start;
+  }
 }
 
 .timestamp {

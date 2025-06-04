@@ -284,20 +284,51 @@ export default {
     },
 
     renderDistributionChart(ctx) {
-      // Calculate attendance distribution
+      // Calculate attendance distribution with mixed types
       const totalRecords = this.attendanceData.length
-      const remoteCount = this.attendanceData.filter((record) => record.remote).length
-      const inPersonCount = totalRecords - remoteCount
+
+      // Initialize counters
+      let remoteCount = 0
+      let inPersonCount = 0
+      let mixedCount = 0
+
+      // Count each type
+      this.attendanceData.forEach((record) => {
+        if (record.badgeType === 'mixed') {
+          mixedCount++
+        } else if (record.remote) {
+          remoteCount++
+        } else {
+          inPersonCount++
+        }
+      })
+
+      // Decide how to display the data
+      let labels, data, backgroundColor, borderColor
+
+      if (mixedCount > 0) {
+        // Include mixed as a separate category
+        labels = ['Office', 'Remote', 'Mixed']
+        data = [inPersonCount, remoteCount, mixedCount]
+        backgroundColor = ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)', 'rgba(2, 119, 189, 0.7)']
+        borderColor = ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)', 'rgba(2, 119, 189, 1)']
+      } else {
+        // Original two categories
+        labels = ['Office', 'Remote']
+        data = [inPersonCount, remoteCount]
+        backgroundColor = ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)']
+        borderColor = ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)']
+      }
 
       this.chart = new Chart(ctx, {
         type: 'doughnut',
         data: {
-          labels: ['Office', 'Remote'],
+          labels: labels,
           datasets: [
             {
-              data: [inPersonCount, remoteCount],
-              backgroundColor: ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)'],
-              borderColor: ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)'],
+              data: data,
+              backgroundColor: backgroundColor,
+              borderColor: borderColor,
               borderWidth: 1
             }
           ]
@@ -327,6 +358,77 @@ export default {
           }
         }
       })
+    },
+
+    renderDistributionChartSplit(ctx) {
+      // Calculate attendance distribution with mixed types split
+      const totalRecords = this.attendanceData.length
+
+      // Initialize counters
+      let pureRemoteCount = 0
+      let pureOfficeCount = 0
+      let mixedCount = 0
+
+      // Count each type
+      this.attendanceData.forEach((record) => {
+        if (record.badgeType === 'mixed') {
+          mixedCount++
+        } else if (record.remote) {
+          pureRemoteCount++
+        } else {
+          pureOfficeCount++
+        }
+      })
+
+      // Calculate effective counts (split mixed between both categories)
+      const effectiveRemoteCount = pureRemoteCount + mixedCount * 0.5
+      const effectiveOfficeCount = pureOfficeCount + mixedCount * 0.5
+
+      this.chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Office', 'Remote'],
+          datasets: [
+            {
+              data: [effectiveOfficeCount, effectiveRemoteCount],
+              backgroundColor: ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)'],
+              borderColor: ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)'],
+              borderWidth: 1
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Attendance Distribution (Mixed Split)',
+              font: {
+                size: 16
+              }
+            },
+            legend: {
+              position: 'top'
+            },
+            tooltip: {
+              callbacks: {
+                label: function (context) {
+                  const value = context.raw
+                  const hasDecimal = value % 1 !== 0
+                  const formattedValue = hasDecimal ? value.toFixed(1) : value
+                  const percentage = Math.round((value / totalRecords) * 100)
+                  return `${context.label}: ${formattedValue} days (${percentage}%)`
+                }
+              }
+            }
+          }
+        }
+      })
+    },
+
+    isMixedAttendance(record) {
+      return record.badgeType === 'mixed'
     },
 
     renderStreakChart(ctx) {
@@ -417,7 +519,12 @@ export default {
 
           months[monthYear]++
 
-          if (record.remote) {
+          // Handle mixed attendance types
+          if (record.badgeType === 'mixed') {
+            // Count as 0.5 for both categories
+            inPersonMonths[monthYear] += 0.5
+            remoteMonths[monthYear] += 0.5
+          } else if (record.remote) {
             remoteMonths[monthYear]++
           } else {
             inPersonMonths[monthYear]++
@@ -450,7 +557,12 @@ export default {
         const date = new Date(record.date)
         const dayOfWeek = date.getDay()
 
-        if (record.remote) {
+        // Handle mixed attendance types
+        if (record.badgeType === 'mixed') {
+          // Count as 0.5 for both categories
+          inPersonDays[dayOfWeek] += 0.5
+          remoteDays[dayOfWeek] += 0.5
+        } else if (record.remote) {
           remoteDays[dayOfWeek]++
         } else {
           inPersonDays[dayOfWeek]++
