@@ -31,24 +31,32 @@ export default {
       chartKey: 0,
       renderTimeout: null,
       isRendering: false,
-      isLoading: false
+      isLoading: false,
+      isSwitchingChartType: false,
+      pendingChartType: null
     }
   },
   watch: {
     attendanceData: {
       handler() {
-        this.debouncedRenderChart()
+        this.safeRenderChart()
       },
       deep: true
     },
-    chartType() {
-      // Increment key to force canvas recreation
-      this.chartKey++
-      this.debouncedRenderChart()
+    chartType(newType) {
+      // If already rendering, queue the chart type change
+      if (this.isRendering || this.isLoading) {
+        console.log('Chart is currently rendering, queueing chart type change to:', newType)
+        this.pendingChartType = newType
+        return
+      }
+
+      // Otherwise, proceed with the chart type change
+      this.executeChartTypeChange(newType)
     }
   },
   mounted() {
-    this.debouncedRenderChart()
+    this.safeRenderChart()
   },
   beforeUnmount() {
     this.cleanupChart()
@@ -58,6 +66,46 @@ export default {
     }
   },
   methods: {
+    safeRenderChart() {
+      // Cancel any pending render
+      if (this.renderTimeout) {
+        clearTimeout(this.renderTimeout)
+      }
+
+      // Clean up existing chart
+      this.cleanupChart()
+
+      // Show loading state
+      this.isLoading = true
+
+      // Set a timeout to prevent rapid re-renders
+      this.renderTimeout = setTimeout(() => {
+        this.isRendering = true
+
+        this.$nextTick(() => {
+          try {
+            this.renderChart()
+          } catch (error) {
+            console.error('Error rendering chart:', error)
+            this.hasData = false
+          } finally {
+            this.isRendering = false
+            this.isLoading = false
+
+            // Check if there's a pending chart type change
+            if (this.pendingChartType) {
+              const pendingType = this.pendingChartType
+              this.pendingChartType = null
+              console.log('Processing pending chart type change to:', pendingType)
+              this.$nextTick(() => {
+                this.executeChartTypeChange(pendingType)
+              })
+            }
+          }
+        })
+      }, 200) // Increased debounce time for stability
+    },
+
     debouncedRenderChart() {
       // Cancel any pending render
       if (this.renderTimeout) {
@@ -75,12 +123,32 @@ export default {
         if (!this.isRendering) {
           this.isRendering = true
           this.$nextTick(() => {
-            this.renderChart()
-            this.isRendering = false
-            this.isLoading = false
+            try {
+              this.renderChart()
+            } catch (error) {
+              console.error('Error rendering chart:', error)
+              this.hasData = false
+            } finally {
+              this.isRendering = false
+              this.isLoading = false
+            }
           })
         }
       }, 150) // 150ms debounce time
+    },
+
+    executeChartTypeChange(newType) {
+      console.log('Executing chart type change to:', newType)
+      // Increment key to force canvas recreation
+      this.chartKey++
+
+      // Clean up existing chart
+      this.cleanupChart()
+
+      // Render new chart on next tick
+      this.$nextTick(() => {
+        this.safeRenderChart()
+      })
     },
 
     cleanupChart() {
@@ -106,12 +174,16 @@ export default {
         return
       }
 
+      const ctx = this.$refs.chartCanvas.getContext('2d')
+      if (!ctx) {
+        console.warn('Could not get canvas context')
+        return
+      }
+
+      // Make sure canvas is clean
+      ctx.clearRect(0, 0, this.$refs.chartCanvas.width, this.$refs.chartCanvas.height)
+
       try {
-        const ctx = this.$refs.chartCanvas.getContext('2d')
-
-        // Make sure canvas is clean
-        ctx.clearRect(0, 0, this.$refs.chartCanvas.width, this.$refs.chartCanvas.height)
-
         if (this.chartType === 'monthly') {
           this.renderMonthlyChart(ctx)
         } else if (this.chartType === 'weekly') {
@@ -123,7 +195,7 @@ export default {
         }
         this.hasData = true
       } catch (error) {
-        console.error('Error rendering chart:', error)
+        console.error('Error in specific chart render method:', error)
         this.hasData = false
       }
     },
@@ -137,7 +209,7 @@ export default {
         return
       }
 
-      this.chart = new Chart(ctx, {
+      const config = {
         type: 'bar',
         data: {
           labels: monthlyData.labels,
@@ -147,14 +219,16 @@ export default {
               data: monthlyData.inPersonCounts,
               backgroundColor: 'rgba(56, 142, 60, 0.7)',
               borderColor: 'rgba(56, 142, 60, 1)',
-              borderWidth: 1
+              borderWidth: 1,
+              fill: false
             },
             {
               label: 'Remote',
               data: monthlyData.remoteCounts,
               backgroundColor: 'rgba(25, 118, 210, 0.7)',
               borderColor: 'rgba(25, 118, 210, 1)',
-              borderWidth: 1
+              borderWidth: 1,
+              fill: false
             }
           ]
         },
@@ -201,7 +275,9 @@ export default {
             }
           }
         }
-      })
+      }
+
+      this.chart = new Chart(ctx, config)
     },
 
     renderWeeklyChart(ctx) {
@@ -218,7 +294,7 @@ export default {
           return
         }
 
-        this.chart = new Chart(ctx, {
+        const config = {
           type: 'radar',
           data: {
             labels: weeklyData.labels,
@@ -231,7 +307,8 @@ export default {
                 pointBackgroundColor: 'rgba(56, 142, 60, 1)',
                 pointBorderColor: '#fff',
                 pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: 'rgba(56, 142, 60, 1)'
+                pointHoverBorderColor: 'rgba(56, 142, 60, 1)',
+                fill: true
               },
               {
                 label: 'Remote',
@@ -241,7 +318,8 @@ export default {
                 pointBackgroundColor: 'rgba(25, 118, 210, 1)',
                 pointBorderColor: '#fff',
                 pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: 'rgba(25, 118, 210, 1)'
+                pointHoverBorderColor: 'rgba(25, 118, 210, 1)',
+                fill: true
               }
             ]
           },
@@ -276,7 +354,9 @@ export default {
               }
             }
           }
-        })
+        }
+
+        this.chart = new Chart(ctx, config)
       } catch (error) {
         console.error('Error rendering weekly chart:', error)
         this.hasData = false
@@ -284,51 +364,20 @@ export default {
     },
 
     renderDistributionChart(ctx) {
-      // Calculate attendance distribution with mixed types
+      // Calculate attendance distribution
       const totalRecords = this.attendanceData.length
+      const remoteCount = this.attendanceData.filter((record) => record.remote).length
+      const inPersonCount = totalRecords - remoteCount
 
-      // Initialize counters
-      let remoteCount = 0
-      let inPersonCount = 0
-      let mixedCount = 0
-
-      // Count each type
-      this.attendanceData.forEach((record) => {
-        if (record.badgeType === 'mixed') {
-          mixedCount++
-        } else if (record.remote) {
-          remoteCount++
-        } else {
-          inPersonCount++
-        }
-      })
-
-      // Decide how to display the data
-      let labels, data, backgroundColor, borderColor
-
-      if (mixedCount > 0) {
-        // Include mixed as a separate category
-        labels = ['Office', 'Remote', 'Mixed']
-        data = [inPersonCount, remoteCount, mixedCount]
-        backgroundColor = ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)', 'rgba(2, 119, 189, 0.7)']
-        borderColor = ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)', 'rgba(2, 119, 189, 1)']
-      } else {
-        // Original two categories
-        labels = ['Office', 'Remote']
-        data = [inPersonCount, remoteCount]
-        backgroundColor = ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)']
-        borderColor = ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)']
-      }
-
-      this.chart = new Chart(ctx, {
+      const config = {
         type: 'doughnut',
         data: {
-          labels: labels,
+          labels: ['Office', 'Remote'],
           datasets: [
             {
-              data: data,
-              backgroundColor: backgroundColor,
-              borderColor: borderColor,
+              data: [inPersonCount, remoteCount],
+              backgroundColor: ['rgba(56, 142, 60, 0.7)', 'rgba(25, 118, 210, 0.7)'],
+              borderColor: ['rgba(56, 142, 60, 1)', 'rgba(25, 118, 210, 1)'],
               borderWidth: 1
             }
           ]
@@ -357,7 +406,9 @@ export default {
             }
           }
         }
-      })
+      }
+
+      this.chart = new Chart(ctx, config)
     },
 
     renderDistributionChartSplit(ctx) {
@@ -435,7 +486,7 @@ export default {
       // Calculate attendance streaks
       const streakData = this.calculateStreaks()
 
-      this.chart = new Chart(ctx, {
+      const config = {
         type: 'line',
         data: {
           labels: streakData.labels,
@@ -447,7 +498,7 @@ export default {
               borderColor: 'rgba(255, 152, 0, 1)',
               borderWidth: 2,
               tension: 0.1,
-              fill: true,
+              fill: false,
               pointRadius: 4,
               pointBackgroundColor: 'rgba(255, 152, 0, 1)'
             }
@@ -494,7 +545,9 @@ export default {
             }
           }
         }
-      })
+      }
+
+      this.chart = new Chart(ctx, config)
     },
 
     groupDataByMonth() {
