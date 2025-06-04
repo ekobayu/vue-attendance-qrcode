@@ -888,8 +888,6 @@ export default {
     getSessionTypeDisplay(type) {
       if (type === 'office') {
         return 'Office'
-      } else if (type === 'morning') {
-        return 'Morning'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
@@ -913,6 +911,12 @@ export default {
   border-left: 4px solid #4caf50;
   display: flex;
   justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .user-info {
+    display: block;
+  }
 }
 
 .login-link {
@@ -1476,10 +1480,13 @@ export default {
 }
 
 .scan-status {
-  margin-top: 20px;
   padding: 15px;
   background-color: #f5f5f5;
   border-radius: 8px;
+}
+
+.scan-status h3 {
+  margin-top: 0;
 }
 
 .status-card {

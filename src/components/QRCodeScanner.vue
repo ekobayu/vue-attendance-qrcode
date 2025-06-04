@@ -257,7 +257,7 @@ export default {
 
         // Set session type
         if (sessionData.type === 'office') {
-          this.sessionType = 'Office (07.30 AM - 04.30 PM)'
+          this.sessionType = 'Office'
         } else {
           this.sessionType = 'Custom Session'
         }

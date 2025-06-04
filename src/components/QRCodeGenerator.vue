@@ -6,7 +6,7 @@
       <div class="form-group">
         <label for="session-type">Session Type:</label>
         <select id="session-type" v-model="sessionType">
-          <option value="office">Office (07:30 AM - 04:30 PM)</option>
+          <option value="office">Office</option>
           <option value="custom">Custom Session</option>
         </select>
       </div>
@@ -46,8 +46,9 @@
         <h3>Active Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
         <p><strong>Type:</strong> {{ getSessionTypeDisplay(activeSession.type) }}</p>
-        <!-- <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
-        <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p> -->
+        <p>
+          <strong>Time:</strong> {{ formatTime(activeSession.startTime) }} - {{ formatTime(activeSession.endTime) }}
+        </p>
         <p><strong>Attendees:</strong> {{ attendeeCount }}</p>
         <div class="scan-limit-info">
           <span class="scan-limit-badge">2 Scans Per Day</span><br />
@@ -723,8 +724,9 @@ export default {
       <div class="session-info">
         <h3>Session Information</h3>
         <p><strong>Date:</strong> ${this.formatDate(this.activeSession.date)}</p>
-        <p><strong>Valid from:</strong> ${this.formatTime(this.activeSession.startTime)}</p>
-        <p><strong>Valid until:</strong> ${this.formatTime(this.activeSession.endTime)}</p>
+        <p><strong>Time</strong> ${this.formatTime(this.activeSession.startTime)} - ${this.formatTime(
+        this.activeSession.endTime
+      )}</p>
         <div class="scan-limit">
           <p><strong>Scan Limit:</strong> 2 scans per day</p>
           <p>First scan: Check-in | Second scan: Check-out</p>
@@ -755,10 +757,7 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        return 'Office (07:30 AM - 04:30 PM)'
-      } else if (type === 'morning') {
-        // For backward compatibility
-        return 'Morning (07:30 AM - 04:30 PM)'
+        return 'Office'
       } else if (type === 'custom') {
         return 'Custom Session'
       }

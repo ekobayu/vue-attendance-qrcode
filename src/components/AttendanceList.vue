@@ -1092,8 +1092,6 @@ export default {
     getSessionTypeDisplay(type) {
       if (type === 'office') {
         return 'Office'
-      } else if (type === 'morning') {
-        return 'Morning'
       } else if (type === 'custom') {
         return 'Custom Session'
       }

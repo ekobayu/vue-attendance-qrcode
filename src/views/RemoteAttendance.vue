@@ -67,8 +67,9 @@
         <h3>Active Attendance Session</h3>
         <p><strong>Date:</strong> {{ formatDate(activeSession.date) }}</p>
         <p><strong>Type:</strong> {{ getSessionTypeDisplay(activeSession.type) }}</p>
-        <!-- <p><strong>Valid from:</strong> {{ formatTime(activeSession.startTime) }}</p>
-        <p><strong>Valid until:</strong> {{ formatTime(activeSession.endTime) }}</p> -->
+        <p>
+          <strong>Time:</strong> {{ formatTime(activeSession.startTime) }} - {{ formatTime(activeSession.endTime) }}
+        </p>
       </div>
 
       <div v-else class="no-session">
@@ -518,9 +519,7 @@ export default {
 
               // Get session type
               if (latestRecord.sessionType === 'office') {
-                this.sessionType = 'Office (07:30 AM - 04:30 PM)'
-              } else if (latestRecord.sessionType === 'morning') {
-                this.sessionType = 'Morning (08:00 AM - 05:00 PM)'
+                this.sessionType = 'Office'
               } else {
                 this.sessionType = 'Custom Session'
               }
@@ -551,9 +550,7 @@ export default {
 
             // Get session type
             if (data.sessionType === 'office') {
-              this.sessionType = 'Office (07:30 AM - 04:30 PM)'
-            } else if (data.sessionType === 'morning') {
-              this.sessionType = 'Morning (08:00 AM - 05:00 PM)'
+              this.sessionType = 'Office'
             } else {
               this.sessionType = 'Custom Session'
             }
@@ -602,9 +599,7 @@ export default {
 
         // Set session type
         if (this.activeSession.type === 'office') {
-          this.sessionType = 'Office (07:30 AM - 04:30 PM)'
-        } else if (this.activeSession.type === 'day') {
-          this.sessionType = 'Morning (08:00 AM - 05:00 PM)'
+          this.sessionType = 'Office'
         } else {
           this.sessionType = 'Custom Session'
         }
@@ -777,9 +772,7 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        return 'Office (07:30 AM - 04:30 PM)'
-      } else if (type === 'morning') {
-        return 'Morning (07:30 AM - 04:30 PM)'
+        return 'Office'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
@@ -819,6 +812,12 @@ export default {
   border-left: 4px solid #4caf50;
   display: flex;
   justify-content: space-between;
+}
+
+@media (max-width: 768px) {
+  .user-info {
+    display: block;
+  }
 }
 
 .login-link {

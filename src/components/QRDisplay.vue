@@ -21,8 +21,7 @@
           <h3>Session Information</h3>
           <p><strong>Date:</strong> {{ formatDate(session.date) }}</p>
           <p><strong>Type:</strong> {{ getSessionTypeDisplay(session.type) }}</p>
-          <!-- <p><strong>Valid from:</strong> {{ formatTime(session.startTime) }}</p>
-          <p><strong>Valid until:</strong> {{ formatTime(session.endTime) }}</p> -->
+          <p><strong>Time</strong> {{ formatTime(session.startTime) }} - {{ formatTime(session.endTime) }}</p>
           <div class="scan-info">
             <p><strong>Scan Limit:</strong> 2 scans per day</p>
             <p>First scan: Check-in | Second scan: Check-out</p>
@@ -184,9 +183,7 @@ export default {
 
     getSessionTypeDisplay(type) {
       if (type === 'office') {
-        return 'Office (07:30 AM - 04:30 PM)'
-      } else if (type === 'morning') {
-        return 'Morning (07:30 AM - 04:30 PM)'
+        return 'Office'
       } else if (type === 'custom') {
         return 'Custom Session'
       }
