@@ -72,7 +72,7 @@
             <h3>Office Attendance</h3>
             <p>Scan the attendance QR code displayed in office to mark your attendance.</p>
             <div class="attendance-card" v-if="scanCount < 2">
-              <QRCodeScanner />
+              <QRCodeScanner @attendance-marked="refreshAttendanceData" />
             </div>
             <div class="limit-message" v-else>
               <p>You have reached your daily scan limit (2 scans).</p>
@@ -463,6 +463,15 @@ export default {
     this.loadRemoteWorkSettings()
   },
   methods: {
+    refreshAttendanceData() {
+      console.log('Refreshing attendance data after scan')
+      // Refresh today's attendance status
+      this.loadTodayAttendance()
+
+      // Refresh attendance history
+      this.loadAttendanceHistory(true)
+    },
+
     getBadgeClass(record) {
       if (record.badgeType === 'mixed') {
         return 'mixed-badge'

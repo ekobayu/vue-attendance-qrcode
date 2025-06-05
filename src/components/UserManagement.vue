@@ -1266,6 +1266,7 @@ th.sorted .sort-icon {
 
 .form-group {
   margin-bottom: 15px;
+  max-width: 430px;
 }
 
 .form-group label {

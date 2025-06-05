@@ -80,6 +80,7 @@ export default {
   components: {
     QrcodeStream
   },
+  emits: ['attendance-marked'],
   data() {
     return {
       scanning: false,
@@ -274,8 +275,6 @@ export default {
           remote: false // This is office attendance
         }
 
-        // console.log('New attendance record:', newAttendanceRecord)
-
         if (userAttendanceSnapshot.exists()) {
           const existingData = userAttendanceSnapshot.val()
 
@@ -341,7 +340,11 @@ export default {
         await this.checkTodayScans()
 
         // Set attendance marked to show success screen
+        // After successful attendance marking
         this.attendanceMarked = true
+
+        // Emit an event to the parent component
+        this.$emit('attendance-marked')
       } catch (error) {
         console.error('Error marking attendance:', error)
         this.error = 'Failed to mark attendance: ' + error.message
@@ -381,6 +384,9 @@ export default {
     resetAttendance() {
       this.attendanceMarked = false
       this.error = null
+
+      // Emit event to refresh data when closing the success screen
+      this.$emit('attendance-marked')
     },
 
     formatDate(dateString) {

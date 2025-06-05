@@ -1914,12 +1914,87 @@ export default {
     async performDeleteArchivedSession(session) {
       const toast = useToast()
       try {
-        if (!session || !session.id) {
+        if (!session || !session.id || !session.date) {
           throw new Error('Invalid session data')
+        }
+
+        // Check if this session is currently active in the QR generator
+        const activeSessionRef = dbRef(db, 'active-session')
+        const activeSessionSnapshot = await get(activeSessionRef)
+
+        if (activeSessionSnapshot.exists()) {
+          const activeSession = activeSessionSnapshot.val()
+
+          // If the active QR session matches the session being deleted, end it
+          if (activeSession.sessionId === session.id) {
+            console.log('Ending active QR session that matches the deleted session')
+            await remove(activeSessionRef)
+          }
         }
 
         // Reference to the archived session
         const archivedRef = dbRef(db, `archived-sessions/${session.id}`)
+
+        // First, get the session data to find all attendees
+        const sessionSnapshot = await get(archivedRef)
+        if (sessionSnapshot.exists()) {
+          const sessionData = sessionSnapshot.val()
+
+          // If the session has attendees, we need to delete their daily attendance records
+          // and their user attendance history
+          if (sessionData.attendees) {
+            // Get all records from daily attendance for this date
+            const dailyAttendanceRef = dbRef(db, `daily-attendance/${session.date}`)
+            const dailySnapshot = await get(dailyAttendanceRef)
+
+            if (dailySnapshot.exists()) {
+              const dailyData = dailySnapshot.val()
+              const recordsToDelete = []
+              const userAttendanceToDelete = new Map() // Map of userId -> recordIds to delete
+
+              // Find all records that belong to this session
+              Object.entries(dailyData).forEach(([recordId, record]) => {
+                if (record.sessionId === session.id) {
+                  recordsToDelete.push(recordId)
+
+                  // Track which user's attendance history needs to be updated
+                  if (record.userId) {
+                    if (!userAttendanceToDelete.has(record.userId)) {
+                      userAttendanceToDelete.set(record.userId, [])
+                    }
+                    userAttendanceToDelete.get(record.userId).push(record.timestamp)
+                  }
+                }
+              })
+
+              // Delete each record from daily attendance
+              for (const recordId of recordsToDelete) {
+                const recordRef = dbRef(db, `daily-attendance/${session.date}/${recordId}`)
+                await remove(recordRef)
+              }
+
+              console.log(`Deleted ${recordsToDelete.length} daily attendance records for session ${session.id}`)
+
+              // Delete from user attendance history
+              for (const [userId, timestamps] of userAttendanceToDelete.entries()) {
+                for (const timestamp of timestamps) {
+                  const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${session.date}/${timestamp}`)
+                  await remove(userAttendanceRef)
+                  console.log(`Deleted attendance history for user ${userId} on ${session.date} at ${timestamp}`)
+                }
+
+                // Check if this was the user's only attendance record for this date
+                // If so, remove the entire date entry
+                const userDateRef = dbRef(db, `user-attendance/${userId}/${session.date}`)
+                const userDateSnapshot = await get(userDateRef)
+                if (!userDateSnapshot.exists() || Object.keys(userDateSnapshot.val()).length === 0) {
+                  await remove(userDateRef)
+                  console.log(`Removed empty date entry for user ${userId} on ${session.date}`)
+                }
+              }
+            }
+          }
+        }
 
         // Delete the archived session
         await remove(archivedRef)
@@ -1932,6 +2007,11 @@ export default {
 
         // Refresh archived sessions list
         this.loadArchivedSessions()
+
+        // Also refresh daily attendance if we're on the same date
+        if (this.selectedDate === session.date) {
+          this.loadDailyAttendance()
+        }
 
         // If the deleted session was being viewed in the modal, close it
         if (this.selectedSession && this.selectedSession.id === session.id) {
@@ -2067,9 +2147,93 @@ export default {
           throw new Error('No sessions selected for deletion')
         }
 
-        // Delete each session one by one
+        // Check if any of these sessions is currently active in the QR generator
+        const activeSessionRef = dbRef(db, 'active-session')
+        const activeSessionSnapshot = await get(activeSessionRef)
+
+        if (activeSessionSnapshot.exists()) {
+          const activeSession = activeSessionSnapshot.val()
+
+          // If the active QR session is in the list of sessions being deleted, end it
+          if (sessionIds.includes(activeSession.sessionId)) {
+            console.log('Ending active QR session that matches one of the deleted sessions')
+            await remove(activeSessionRef)
+          }
+        }
+
+        // Get session details for each session ID
+        const sessionDetails = []
         for (const sessionId of sessionIds) {
-          const archivedRef = dbRef(db, `archived-sessions/${sessionId}`)
+          const sessionRef = dbRef(db, `archived-sessions/${sessionId}`)
+          const snapshot = await get(sessionRef)
+          if (snapshot.exists()) {
+            const sessionData = snapshot.val()
+            sessionDetails.push({
+              id: sessionId,
+              date: sessionData.date,
+              attendees: sessionData.attendees
+            })
+          }
+        }
+
+        // Process each session
+        for (const session of sessionDetails) {
+          // Delete related daily attendance records and user attendance history
+          if (session.date && session.attendees) {
+            // Get all records from daily attendance for this date
+            const dailyAttendanceRef = dbRef(db, `daily-attendance/${session.date}`)
+            const dailySnapshot = await get(dailyAttendanceRef)
+
+            if (dailySnapshot.exists()) {
+              const dailyData = dailySnapshot.val()
+              const recordsToDelete = []
+              const userAttendanceToDelete = new Map() // Map of userId -> recordIds to delete
+
+              // Find all records that belong to this session
+              Object.entries(dailyData).forEach(([recordId, record]) => {
+                if (record.sessionId === session.id) {
+                  recordsToDelete.push(recordId)
+
+                  // Track which user's attendance history needs to be updated
+                  if (record.userId) {
+                    if (!userAttendanceToDelete.has(record.userId)) {
+                      userAttendanceToDelete.set(record.userId, [])
+                    }
+                    userAttendanceToDelete.get(record.userId).push(record.timestamp)
+                  }
+                }
+              })
+
+              // Delete each record from daily attendance
+              for (const recordId of recordsToDelete) {
+                const recordRef = dbRef(db, `daily-attendance/${session.date}/${recordId}`)
+                await remove(recordRef)
+              }
+
+              console.log(`Deleted ${recordsToDelete.length} daily attendance records for session ${session.id}`)
+
+              // Delete from user attendance history
+              for (const [userId, timestamps] of userAttendanceToDelete.entries()) {
+                for (const timestamp of timestamps) {
+                  const userAttendanceRef = dbRef(db, `user-attendance/${userId}/${session.date}/${timestamp}`)
+                  await remove(userAttendanceRef)
+                  console.log(`Deleted attendance history for user ${userId} on ${session.date} at ${timestamp}`)
+                }
+
+                // Check if this was the user's only attendance record for this date
+                // If so, remove the entire date entry
+                const userDateRef = dbRef(db, `user-attendance/${userId}/${session.date}`)
+                const userDateSnapshot = await get(userDateRef)
+                if (!userDateSnapshot.exists() || Object.keys(userDateSnapshot.val()).length === 0) {
+                  await remove(userDateRef)
+                  console.log(`Removed empty date entry for user ${userId} on ${session.date}`)
+                }
+              }
+            }
+          }
+
+          // Delete the archived session
+          const archivedRef = dbRef(db, `archived-sessions/${session.id}`)
           await remove(archivedRef)
         }
 
@@ -2084,6 +2248,9 @@ export default {
 
         // Refresh archived sessions list
         this.loadArchivedSessions()
+
+        // Also refresh daily attendance
+        this.loadDailyAttendance()
 
         // If a deleted session was being viewed in the modal, close it
         if (this.selectedSession && sessionIds.includes(this.selectedSession.id)) {
