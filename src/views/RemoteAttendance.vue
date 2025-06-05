@@ -81,7 +81,7 @@
         <h3>Mark Remote Attendance</h3>
 
         <div class="form-group">
-          <label for="location">Working From:</label>
+          <label for="location">Working From: <span class="required">*</span></label>
           <div class="location-input">
             <input
               disabled
@@ -114,16 +114,18 @@
         </div>
 
         <div class="form-group">
-          <label for="work-summary">Work Summary:</label>
+          <label for="work-summary">Work Summary: <span class="required">*</span></label>
           <textarea
             id="work-summary"
             v-model="workSummary"
             rows="3"
-            placeholder="Brief summary of your work today"
+            placeholder="Brief summary of your work today (required)"
+            :class="{ 'error-input': workSummaryError }"
+            @input="workSummaryError = false"
           ></textarea>
         </div>
 
-        <button @click="markRemoteAttendance" :disabled="!location || submitting" class="mark-btn">
+        <button @click="markRemoteAttendance" :disabled="!location || !workSummary || submitting" class="mark-btn">
           {{ submitting ? 'Submitting...' : 'Mark Attendance' }}
         </button>
       </div>
@@ -201,7 +203,8 @@ export default {
       attendanceRecords: [], // Store attendance records for today
       todayAttendance: null, // Today's attendance status
       scanCount: 0, // Number of scans today
-      loadingStatus: false // Loading state for attendance status
+      loadingStatus: false, // Loading state for attendance status
+      workSummaryError: false
     }
   },
   created() {
@@ -576,6 +579,13 @@ export default {
 
       if (!this.location) {
         this.error = 'Please enter your working location'
+        return
+      }
+
+      // Add validation for work summary
+      if (!this.workSummary || this.workSummary.trim() === '') {
+        this.error = 'Please enter a work summary'
+        this.workSummaryError = true
         return
       }
 
@@ -1187,5 +1197,15 @@ textarea {
 .limit-reached {
   color: #f44336;
   font-weight: bold;
+}
+
+.required {
+  color: #f44336;
+  margin-left: 3px;
+}
+
+.error-input {
+  border-color: #f44336;
+  background-color: #fff8f8;
 }
 </style>

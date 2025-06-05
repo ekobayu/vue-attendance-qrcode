@@ -77,6 +77,9 @@
               <th @click="sortTable('remote')" :class="getSortClass('remote')">
                 Type <span class="sort-icon">{{ getSortIcon('remote') }}</span>
               </th>
+              <th @click="sortTable('workSummary')" :class="getSortClass('workSummary')">
+                Work Summary <span class="sort-icon">{{ getSortIcon('workSummary') }}</span>
+              </th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -146,6 +149,7 @@
                   {{ attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office' }}
                 </span>
               </td>
+              <td>{{ attendee.workSummary || '' }}</td>
               <td>
                 <button @click="confirmDeleteAttendance(attendee)" class="delete-btn" title="Remove attendance record">
                   <span class="delete-icon">🗑️</span>
@@ -435,6 +439,7 @@
                 <th>Location Out</th>
                 <th>Map URL Out</th>
                 <th>Type</th>
+                <th>Work Summary</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -493,6 +498,7 @@
                     {{ getAttendanceType(attendee) }}
                   </span>
                 </td>
+                <td>{{ attendee.workSummary || '' }}</td>
                 <td>
                   <button
                     @click="confirmRemoveAttendeeFromSession(attendee)"
@@ -772,7 +778,8 @@ export default {
             'Out Type',
             'Location Out',
             'Map URL Out',
-            'Attendance Type'
+            'Attendance Type',
+            'Work Summary'
           ]
 
           let csvContent = headers.join(',') + '\n'
@@ -789,7 +796,8 @@ export default {
               record.outType || '',
               record.locationOut || (record.outTime ? 'Office' : ''),
               record.mapUrlOut || '',
-              record.attendanceType
+              record.attendanceType,
+              record.workSummary || ''
             ]
 
             // Escape fields that might contain commas
@@ -934,7 +942,8 @@ export default {
             locationIn: locationIn,
             locationOut: locationOut,
             mapUrlIn: mapUrlIn,
-            mapUrlOut: mapUrlOut
+            mapUrlOut: mapUrlOut,
+            workSummary: firstRecord.workSummary || ''
           })
         })
       }
@@ -1097,7 +1106,8 @@ export default {
           // Store all record IDs for potential deletion
           recordIds: records.map((r) => r.id),
           // Store original index for sorting
-          originalIndex: firstRecord.originalIndex
+          originalIndex: firstRecord.originalIndex,
+          workSummary: firstRecord.workSummary || ''
         }
       })
     },
@@ -2164,7 +2174,8 @@ export default {
         'Out Type',
         'Location Out',
         'Map URL Out',
-        'Attendance Type'
+        'Attendance Type',
+        'Work Summary'
       ]
 
       // Use all filtered data, not just the current page
@@ -2200,7 +2211,8 @@ export default {
           outType,
           attendee.locationOut || (attendee.outTime ? 'Office' : ''),
           attendee.mapUrlOut || '',
-          attendanceType
+          attendanceType,
+          attendee.workSummary || ''
         ]
 
         // Escape fields that might contain commas
@@ -2231,7 +2243,8 @@ export default {
         'Out Type',
         'Location Out',
         'Map URL Out',
-        'Attendance Type'
+        'Attendance Type',
+        'Work Summary'
       ]
 
       let csvContent = headers.join(',') + '\n'
@@ -2253,7 +2266,8 @@ export default {
           outType,
           attendee.locationOut || (attendee.outTime ? 'Office' : ''),
           attendee.mapUrlOut || '',
-          attendanceType
+          attendanceType,
+          attendee.workSummary || ''
         ]
 
         // Escape fields that might contain commas
