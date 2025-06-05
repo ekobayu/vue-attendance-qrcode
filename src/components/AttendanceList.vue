@@ -1249,6 +1249,17 @@ export default {
           throw new Error('Missing required information to delete record')
         }
 
+        // Get the session IDs for this attendance record
+        const sessionIds = new Set()
+
+        // Collect session IDs from the records
+        if (attendee.firstScanDetails && attendee.firstScanDetails.sessionId) {
+          sessionIds.add(attendee.firstScanDetails.sessionId)
+        }
+        if (attendee.secondScanDetails && attendee.secondScanDetails.sessionId) {
+          sessionIds.add(attendee.secondScanDetails.sessionId)
+        }
+
         // Delete all records for this user on this date
         if (attendee.recordIds && attendee.recordIds.length > 0) {
           // Delete each record from daily attendance
@@ -1261,6 +1272,51 @@ export default {
         // Also remove from user's personal attendance history
         const userRef = dbRef(db, `user-attendance/${attendee.userId}/${this.selectedDate}`)
         await remove(userRef)
+
+        // Remove from active sessions
+        for (const sessionId of sessionIds) {
+          // Check active sessions first
+          const activeSessionRef = dbRef(db, `attendance-sessions/${sessionId}/attendees`)
+          const activeSnapshot = await get(activeSessionRef)
+
+          if (activeSnapshot.exists()) {
+            // Find all entries for this user in the session
+            const attendeesToDelete = []
+            Object.entries(activeSnapshot.val()).forEach(([key, value]) => {
+              // Check if this entry belongs to the user we're deleting
+              if ((value.userId && value.userId === attendee.userId) || key.startsWith(attendee.userId + '_')) {
+                attendeesToDelete.push(key)
+              }
+            })
+
+            // Delete each entry
+            for (const key of attendeesToDelete) {
+              await remove(dbRef(db, `attendance-sessions/${sessionId}/attendees/${key}`))
+              console.log(`Removed ${attendee.email} from active session ${sessionId}, key: ${key}`)
+            }
+          }
+
+          // Check archived sessions
+          const archivedSessionRef = dbRef(db, `archived-sessions/${sessionId}/attendees`)
+          const archivedSnapshot = await get(archivedSessionRef)
+
+          if (archivedSnapshot.exists()) {
+            // Find all entries for this user in the archived session
+            const attendeesToDelete = []
+            Object.entries(archivedSnapshot.val()).forEach(([key, value]) => {
+              // Check if this entry belongs to the user we're deleting
+              if ((value.userId && value.userId === attendee.userId) || key.startsWith(attendee.userId + '_')) {
+                attendeesToDelete.push(key)
+              }
+            })
+
+            // Delete each entry
+            for (const key of attendeesToDelete) {
+              await remove(dbRef(db, `archived-sessions/${sessionId}/attendees/${key}`))
+              console.log(`Removed ${attendee.email} from archived session ${sessionId}, key: ${key}`)
+            }
+          }
+        }
 
         // Show success message
         toast.success(`Attendance record for ${attendee.email} has been removed.`, {
@@ -1865,7 +1921,12 @@ export default {
     },
 
     async performArchiveSession(session) {
+      const toast = useToast()
       try {
+        if (!session || !session.id) {
+          throw new Error('Invalid session data')
+        }
+
         // Add archived timestamp
         const archivedSession = {
           ...session,
@@ -1880,34 +1941,78 @@ export default {
         const activeRef = dbRef(db, `attendance-sessions/${session.id}`)
         await remove(activeRef)
 
+        // Show success message using toast
+        toast.success(`Session from ${this.formatDate(session.date)} has been archived.`, {
+          position: 'top-center',
+          duration: 3000
+        })
+
         // Refresh data
         this.loadSessions()
         this.loadArchivedSessions()
+
+        // If the archived session was being viewed in the modal, close it
+        if (this.selectedSession && this.selectedSession.id === session.id) {
+          this.closeSessionDetails()
+        }
       } catch (error) {
         console.error('Error archiving session:', error)
-        alert('Failed to archive session: ' + error.message)
+        toast.error(`Failed to archive session: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
       }
     },
 
     async performRestoreSession(session) {
+      const toast = useToast()
       try {
-        // Remove archived timestamp
-        const { ...activeSession } = session
+        if (!session || !session.id) {
+          throw new Error('Invalid session data')
+        }
 
-        // Save to active sessions
+        // Get the complete archived session data including attendees
+        const archivedRef = dbRef(db, `archived-sessions/${session.id}`)
+        const snapshot = await get(archivedRef)
+
+        if (!snapshot.exists()) {
+          throw new Error('Archived session not found')
+        }
+
+        const sessionData = snapshot.val()
+
+        // Create a copy of the session data without the archivedAt property
+        // We're using object spread to create a new object, but we need to explicitly omit archivedAt
+        const activeSessionData = { ...sessionData }
+        delete activeSessionData.archivedAt // Remove the archivedAt property
+
+        // Save to active sessions with all data including attendees
         const activeRef = dbRef(db, `attendance-sessions/${session.id}`)
-        await set(activeRef, activeSession)
+        await set(activeRef, activeSessionData)
 
         // Remove from archived sessions
-        const archivedRef = dbRef(db, `archived-sessions/${session.id}`)
         await remove(archivedRef)
+
+        // Show success message
+        toast.success(`Session from ${this.formatDate(session.date)} has been restored.`, {
+          position: 'top-center',
+          duration: 3000
+        })
 
         // Refresh data
         this.loadSessions()
         this.loadArchivedSessions()
+
+        // If the restored session was being viewed in the modal, close it
+        if (this.selectedSession && this.selectedSession.id === session.id) {
+          this.closeSessionDetails()
+        }
       } catch (error) {
         console.error('Error restoring session:', error)
-        alert('Failed to restore session: ' + error.message)
+        toast.error(`Failed to restore session: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
       }
     },
 
