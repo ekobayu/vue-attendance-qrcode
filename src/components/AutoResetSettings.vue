@@ -59,6 +59,11 @@ export default {
     this.loadCurrentSettings()
   },
   methods: {
+    getDayName(timestamp) {
+      if (!timestamp) return ''
+      const date = new Date(timestamp)
+      return date.toLocaleDateString(undefined, { weekday: 'long' })
+    },
     // Helper function to show toast messages
     showToast(type, message, options = {}) {
       const defaultOptions = {
@@ -152,7 +157,7 @@ export default {
             position: 'bottom-right'
           })
 
-          // Update current settings
+          // Update current settings immediately in the UI
           this.currentSettings = {
             ...this.currentSettings,
             resetHours: this.resetHours,
@@ -160,6 +165,9 @@ export default {
             nextResetTime: nextResetTime,
             updatedAt: Date.now()
           }
+
+          // Log the updated next reset time
+          console.log('Settings saved with next reset time:', new Date(nextResetTime).toLocaleString())
         } catch (error) {
           console.error('Error saving settings:', error)
           this.showToast('error', 'Failed to save settings: ' + error.message)
@@ -173,26 +181,31 @@ export default {
       const now = new Date()
       const [hours, minutes] = this.resetTime.split(':').map(Number)
 
-      // Set next reset time to today at specified time
+      // First, set next reset time to today at specified time
       const nextReset = new Date(now)
       nextReset.setHours(hours, minutes, 0, 0)
 
-      // If that time has already passed today, add specified hours
+      // If that time has already passed today, add the reset interval
       if (nextReset <= now) {
+        // Add the reset hours to get to the next interval
         nextReset.setTime(nextReset.getTime() + this.resetHours * 60 * 60 * 1000)
       }
 
-      // If the next reset falls on a weekend, skip to Monday
-      const day = nextReset.getDay()
+      // Now check if the calculated next reset falls on a weekend
+      const day = nextReset.getDay() // 0 = Sunday, 6 = Saturday
+
       if (day === 0) {
         // Sunday
-        nextReset.setDate(nextReset.getDate() + 1) // Skip to Monday
-        nextReset.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
+        // Move to Monday, same time
+        nextReset.setDate(nextReset.getDate() + 1)
       } else if (day === 6) {
         // Saturday
-        nextReset.setDate(nextReset.getDate() + 2) // Skip to Monday
-        nextReset.setHours(hours, minutes, 0, 0) // Reset to the specified time on Monday
+        // Move to Monday, same time
+        nextReset.setDate(nextReset.getDate() + 2)
       }
+
+      // Log the calculated next reset time for debugging
+      console.log('Next reset time calculated:', new Date(nextReset).toLocaleString())
 
       return nextReset.getTime()
     },
