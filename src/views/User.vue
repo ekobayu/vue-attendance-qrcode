@@ -17,6 +17,21 @@
         </p>
       </div>
 
+      <!-- New Early Bird Feature -->
+      <div v-if="earlyBirdRank !== null" class="early-bird-card">
+        <div class="early-bird-icon">🌅</div>
+        <div class="early-bird-content">
+          <h3>Early Bird Achievement!</h3>
+          <p>
+            You're <strong>#{{ earlyBirdRank + 1 }}</strong> on today's early check-in leaderboard!
+          </p>
+          <p class="early-bird-time">Checked in at {{ formatTime(todayAttendance?.firstScan) }}</p>
+        </div>
+        <div class="early-bird-badge" :class="getRankClass(earlyBirdRank)">
+          {{ getRankLabel(earlyBirdRank) }}
+        </div>
+      </div>
+
       <div class="scan-status">
         <h3>Today's Attendance Status</h3>
         <div v-if="loading" class="loading">Loading...</div>
@@ -309,12 +324,14 @@ export default {
         { label: 'Streak', value: 'streak' }
       ],
       todayAttendance: null,
-      scanCount: 0
+      scanCount: 0,
+      earlyBirdRank: null
       // currentStreak: 0
     }
   },
   mounted() {
     this.loadTodayAttendance()
+    this.checkEarlyBirdStatus()
   },
   computed: {
     recentAttendance() {
@@ -457,16 +474,92 @@ export default {
         this.$router.push('/')
       } else {
         this.loadAttendanceHistory()
+        this.checkEarlyBirdStatus()
       }
     })
 
     this.loadRemoteWorkSettings()
   },
   methods: {
+    async checkEarlyBirdStatus() {
+      if (!this.user) return
+
+      try {
+        const today = getTodayDateString()
+        const todayRef = dbRef(db, `daily-attendance/${today}`)
+
+        // Get all attendance records for today
+        const snapshot = await get(todayRef)
+
+        if (snapshot.exists()) {
+          const records = snapshot.val()
+          const earlyBirds = []
+
+          // Process all records to find early check-ins (before 8 AM)
+          Object.entries(records).forEach(([id, record]) => {
+            if (!record.timestamp) return
+
+            const checkInTime = new Date(record.timestamp)
+            const checkInHour = checkInTime.getHours()
+
+            // Check if this is an early check-in (before 8 AM)
+            if (checkInHour < 8) {
+              earlyBirds.push({
+                ...record,
+                id,
+                checkInHour,
+                checkInMinute: checkInTime.getMinutes()
+              })
+            }
+          })
+
+          // Sort by check-in time (earliest first)
+          earlyBirds.sort((a, b) => {
+            if (a.checkInHour !== b.checkInHour) {
+              return a.checkInHour - b.checkInHour
+            }
+            return a.checkInMinute - b.checkInMinute
+          })
+
+          // Find current user's position in the early birds list
+          const userIndex = earlyBirds.findIndex((record) => record.userId === this.user.uid)
+
+          // If user is in the top 10 early birds, set their rank
+          if (userIndex !== -1 && userIndex < 10) {
+            this.earlyBirdRank = userIndex
+          } else {
+            this.earlyBirdRank = null
+          }
+        } else {
+          this.earlyBirdRank = null
+        }
+      } catch (error) {
+        console.error('Error checking early bird status:', error)
+        this.earlyBirdRank = null
+      }
+    },
+
+    getRankClass(rank) {
+      if (rank === 0) return 'gold'
+      if (rank === 1) return 'silver'
+      if (rank === 2) return 'bronze'
+      return 'standard'
+    },
+
+    getRankLabel(rank) {
+      if (rank === 0) return 'Gold'
+      if (rank === 1) return 'Silver'
+      if (rank === 2) return 'Bronze'
+      return `#${rank + 1}`
+    },
+
     refreshAttendanceData() {
       console.log('Refreshing attendance data after scan')
       // Refresh today's attendance status
       this.loadTodayAttendance()
+
+      // Check early bird status after scan
+      this.checkEarlyBirdStatus()
 
       // Refresh attendance history
       this.loadAttendanceHistory(true)
@@ -557,6 +650,9 @@ export default {
 
               // Update scan count based on actual timestamps
               this.scanCount = Math.min(timestamps.length, 2)
+
+              // Check early bird status after loading attendance
+              this.checkEarlyBirdStatus()
             } else {
               this.todayAttendance = null
               this.scanCount = 0
@@ -568,6 +664,9 @@ export default {
               secondScan: null
             }
             this.scanCount = data.timestamp ? 1 : 0
+
+            // Check early bird status after loading attendance
+            this.checkEarlyBirdStatus()
           }
         } else {
           this.todayAttendance = null
@@ -1710,5 +1809,104 @@ export default {
 .office-mini {
   background-color: #e8f5e9;
   color: #388e3c;
+}
+
+/* New styles for early bird feature */
+.early-bird-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, #fff8e1 0%, #fffde7 100%);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+  border-left: 4px solid #ffc107;
+  position: relative;
+  overflow: hidden;
+}
+
+.early-bird-icon {
+  font-size: 36px;
+  margin-right: 16px;
+  animation: pulse 2s infinite;
+}
+
+.early-bird-content {
+  flex: 1;
+}
+
+.early-bird-content h3 {
+  margin: 0 0 8px 0;
+  color: #ff8f00;
+}
+
+.early-bird-content p {
+  margin: 0;
+  color: #5d4037;
+}
+
+.early-bird-time {
+  font-size: 14px;
+  color: #795548;
+  margin-top: 4px !important;
+}
+
+.early-bird-badge {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+  color: white;
+  text-align: center;
+  min-width: 80px;
+}
+
+.early-bird-badge.gold {
+  background: linear-gradient(135deg, #ffd700 0%, #ffb300 100%);
+  box-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
+}
+
+.early-bird-badge.silver {
+  background: linear-gradient(135deg, #e0e0e0 0%, #9e9e9e 100%);
+  box-shadow: 0 2px 8px rgba(158, 158, 158, 0.4);
+}
+
+.early-bird-badge.bronze {
+  background: linear-gradient(135deg, #d7995b 0%, #a1764a 100%);
+  box-shadow: 0 2px 8px rgba(165, 118, 74, 0.4);
+}
+
+.early-bird-badge.standard {
+  background: linear-gradient(135deg, #81c784 0%, #4caf50 100%);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.4);
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (max-width: 600px) {
+  .early-bird-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 20px 16px;
+  }
+
+  .early-bird-icon {
+    margin-right: 0;
+    margin-bottom: 12px;
+  }
+
+  .early-bird-badge {
+    margin-top: 16px;
+  }
 }
 </style>
