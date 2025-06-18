@@ -2,12 +2,58 @@
   <div class="attendance-list">
     <h2>Attendance Records</h2>
 
+    <!-- New Early Bird Feature -->
+    <div class="early-bird-section">
+      <h3>Early Bird Check-ins (before 8 AM)</h3>
+      <div class="early-bird-filters">
+        <div class="filter-group">
+          <label for="early-bird-period">Time Period:</label>
+          <select id="early-bird-period" v-model="earlyBirdPeriod" @change="loadEarlyBirdData">
+            <option value="day">Today</option>
+            <option value="week">This Week</option>
+            <option value="month">This Month</option>
+            <option value="year">This Year</option>
+          </select>
+        </div>
+        <!-- Removed the date selector for "day" option -->
+      </div>
+
+      <div v-if="earlyBirdUsers.length > 0" class="early-bird-list">
+        <table class="early-bird-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Email</th>
+              <th>Check-in Time</th>
+              <th>Date</th>
+              <th>Type</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(user, index) in earlyBirdUsers" :key="index">
+              <td>{{ index + 1 }}</td>
+              <td>{{ user.email }}</td>
+              <td>{{ formatTime(user.timestamp) }}</td>
+              <td>{{ formatDate(user.date) }}</td>
+              <td>
+                <span :class="user.remote ? 'remote-badge' : 'in-person-badge'">
+                  {{ user.remote ? 'Remote' : 'Office' }}
+                </span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="no-records">No early check-ins found for the selected period.</div>
+    </div>
+
     <div class="tabs">
       <button @click="activeTab = 'daily'" :class="{ active: activeTab === 'daily' }">Daily Attendance</button>
       <button @click="activeTab = 'sessions'" :class="{ active: activeTab === 'sessions' }">Session Records</button>
       <button @click="activeTab = 'archived'" :class="{ active: activeTab === 'archived' }">Archived Sessions</button>
     </div>
 
+    <!-- Daily Attendance Tab -->
     <!-- Daily Attendance Tab -->
     <div v-if="activeTab === 'daily'">
       <div class="filters">
@@ -61,24 +107,10 @@
                 Email <span class="sort-icon">{{ getSortIcon('email') }}</span>
               </th>
               <th @click="sortTable('inTime')" :class="getSortClass('inTime')">
-                In Time <span class="sort-icon">{{ getSortIcon('inTime') }}</span>
+                Time <span class="sort-icon">{{ getSortIcon('inTime') }}</span>
               </th>
-              <th @click="sortTable('locationIn')" :class="getSortClass('locationIn')">
-                Location In <span class="sort-icon">{{ getSortIcon('locationIn') }}</span>
-              </th>
-              <th>Map URL In</th>
-              <th @click="sortTable('outTime')" :class="getSortClass('outTime')">
-                Out Time <span class="sort-icon">{{ getSortIcon('outTime') }}</span>
-              </th>
-              <th @click="sortTable('locationOut')" :class="getSortClass('locationOut')">
-                Location Out <span class="sort-icon">{{ getSortIcon('locationOut') }}</span>
-              </th>
-              <th>Map URL Out</th>
               <th @click="sortTable('remote')" :class="getSortClass('remote')">
                 Type <span class="sort-icon">{{ getSortIcon('remote') }}</span>
-              </th>
-              <th @click="sortTable('workSummary')" :class="getSortClass('workSummary')">
-                Work Summary <span class="sort-icon">{{ getSortIcon('workSummary') }}</span>
               </th>
               <th>Actions</th>
             </tr>
@@ -87,69 +119,108 @@
             <tr v-for="(attendee, index) in filteredAttendees" :key="attendee.userId">
               <td>{{ index + 1 }}</td>
               <td>{{ attendee.email }}</td>
-              <td>
-                {{ formatTime(attendee.inTime) }}
-                <span
-                  v-if="attendee.mixed"
-                  class="mini-badge"
-                  :class="attendee.firstScanDetails.remote ? 'remote-mini' : 'office-mini'"
-                >
-                  {{ attendee.firstScanDetails.remote ? 'Remote' : 'Office' }}
-                </span>
-              </td>
-              <td>{{ attendee.locationIn || 'Office' }}</td>
-              <td>
-                <a
-                  v-if="
-                    attendee.firstScanDetails &&
-                    attendee.firstScanDetails.remote &&
-                    getMapUrlForScan(attendee.firstScanDetails)
-                  "
-                  :href="getMapUrlForScan(attendee.firstScanDetails)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="map-link"
-                  title="View check-in location on Google Maps"
-                >
-                  <span class="map-icon">🗺️</span>
-                </a>
-              </td>
-              <td>
-                <span v-if="attendee.outTime">
-                  {{ formatTime(attendee.outTime) }}
-                  <span
-                    v-if="attendee.mixed"
-                    class="mini-badge"
-                    :class="attendee.secondScanDetails.remote ? 'remote-mini' : 'office-mini'"
-                  >
-                    {{ attendee.secondScanDetails.remote ? 'Remote' : 'Office' }}
-                  </span>
-                </span>
-                <span v-else class="pending-badge">Pending</span>
-              </td>
-              <td>{{ attendee.locationOut || (attendee.outTime ? 'Office' : '') }}</td>
-              <td>
-                <a
-                  v-if="
-                    attendee.secondScanDetails &&
-                    attendee.secondScanDetails.remote &&
-                    getMapUrlForScan(attendee.secondScanDetails)
-                  "
-                  :href="getMapUrlForScan(attendee.secondScanDetails)"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="map-link"
-                  title="View check-out location on Google Maps"
-                >
-                  <span class="map-icon">🗺️</span>
-                </a>
+              <td class="combined-cell">
+                <!-- Check-in information -->
+                <div class="time-section">
+                  <div class="time-label">In:</div>
+                  <div class="time-content">
+                    <div class="time-badge-container">
+                      {{ formatTime(attendee.inTime) }}
+                      <span
+                        v-if="attendee.mixed"
+                        class="mini-badge"
+                        :class="attendee.firstScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                      >
+                        {{ attendee.firstScanDetails.remote ? 'Remote' : 'Office' }}
+                      </span>
+                    </div>
+                    <div
+                      class="location-container"
+                      v-if="attendee.locationIn !== 'Office' || attendee.firstScanDetails?.remote"
+                    >
+                      <span class="location-text">{{ attendee.locationIn || 'Office' }}</span>
+                      <a
+                        v-if="
+                          attendee.firstScanDetails &&
+                          attendee.firstScanDetails.remote &&
+                          getMapUrlForScan(attendee.firstScanDetails)
+                        "
+                        :href="getMapUrlForScan(attendee.firstScanDetails)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="map-link"
+                        title="View check-in location on Google Maps"
+                      >
+                        <span class="map-icon">🗺️</span>
+                      </a>
+                    </div>
+                    <!-- Work summary for remote check-in -->
+                    <div
+                      class="work-summary"
+                      v-if="attendee.firstScanDetails?.remote && attendee.firstScanDetails?.workSummary"
+                    >
+                      <div class="summary-label">Work Summary:</div>
+                      <div class="summary-text">{{ attendee.firstScanDetails?.workSummary }}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Check-out information -->
+                <div class="time-section" v-if="attendee.outTime">
+                  <div class="time-label">Out:</div>
+                  <div class="time-content">
+                    <div class="time-badge-container">
+                      {{ formatTime(attendee.outTime) }}
+                      <span
+                        v-if="attendee.mixed"
+                        class="mini-badge"
+                        :class="attendee.secondScanDetails.remote ? 'remote-mini' : 'office-mini'"
+                      >
+                        {{ attendee.secondScanDetails.remote ? 'Remote' : 'Office' }}
+                      </span>
+                    </div>
+                    <div
+                      class="location-container"
+                      v-if="attendee.locationOut !== 'Office' || attendee.secondScanDetails?.remote"
+                    >
+                      <span class="location-text">{{ attendee.locationOut || 'Office' }}</span>
+                      <a
+                        v-if="
+                          attendee.secondScanDetails &&
+                          attendee.secondScanDetails.remote &&
+                          getMapUrlForScan(attendee.secondScanDetails)
+                        "
+                        :href="getMapUrlForScan(attendee.secondScanDetails)"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="map-link"
+                        title="View check-out location on Google Maps"
+                      >
+                        <span class="map-icon">🗺️</span>
+                      </a>
+                    </div>
+                    <!-- Work summary for remote check-out (if not already shown for check-in) -->
+                    <div
+                      class="work-summary"
+                      v-if="attendee.secondScanDetails?.remote && attendee.secondScanDetails?.workSummary"
+                    >
+                      <div class="summary-label">Work Summary:</div>
+                      <div class="summary-text">{{ attendee.secondScanDetails?.workSummary }}</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="time-section" v-else>
+                  <div class="time-label">Out:</div>
+                  <div class="time-content">
+                    <span class="pending-badge">Pending</span>
+                  </div>
+                </div>
               </td>
               <td>
                 <span :class="attendee.badgeType">
                   {{ attendee.mixed ? 'Mixed' : attendee.remote ? 'Remote' : 'Office' }}
                 </span>
               </td>
-              <td>{{ attendee.workSummary || '' }}</td>
               <td>
                 <button @click="confirmDeleteAttendance(attendee)" class="delete-btn" title="Remove attendance record">
                   <span class="delete-icon">🗑️</span>
@@ -430,16 +501,8 @@
               <tr>
                 <th>#</th>
                 <th>Email</th>
-                <th>In Time</th>
-                <th>In Type</th>
-                <th>Location In</th>
-                <th>Map URL In</th>
-                <th>Out Time</th>
-                <th>Out Type</th>
-                <th>Location Out</th>
-                <th>Map URL Out</th>
+                <th>Time</th>
                 <th>Type</th>
-                <th>Work Summary</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -447,58 +510,105 @@
               <tr v-for="(attendee, index) in filteredModalAttendees" :key="index">
                 <td>{{ index + 1 }}</td>
                 <td>{{ attendee.email }}</td>
-                <td>{{ formatTime(attendee.inTime || attendee.timestamp) }}</td>
-                <td>
-                  <span :class="getInTypeBadgeClass(attendee)">
-                    {{ getInType(attendee) }}
-                  </span>
-                </td>
-                <td>{{ attendee.locationIn || (attendee.remote ? attendee.location : 'Office') }}</td>
-                <td>
-                  <a
-                    v-if="
-                      attendee.firstScanDetails &&
-                      attendee.firstScanDetails.remote &&
-                      getMapUrlForScan(attendee.firstScanDetails)
-                    "
-                    :href="getMapUrlForScan(attendee.firstScanDetails)"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="map-link"
-                    title="View check-in location on Google Maps"
-                  >
-                    <span class="map-icon">🗺️</span>
-                  </a>
-                </td>
-                <td>{{ attendee.outTime ? formatTime(attendee.outTime) : 'Pending' }}</td>
-                <td>
-                  <span v-if="attendee.outTime" :class="getOutTypeBadgeClass(attendee)">
-                    {{ getOutType(attendee) }}
-                  </span>
-                </td>
-                <td>{{ attendee.locationOut || (attendee.outTime ? 'Office' : '') }}</td>
-                <td>
-                  <a
-                    v-if="
-                      attendee.secondScanDetails &&
-                      attendee.secondScanDetails.remote &&
-                      getMapUrlForScan(attendee.secondScanDetails)
-                    "
-                    :href="getMapUrlForScan(attendee.secondScanDetails)"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="map-link"
-                    title="View check-out location on Google Maps"
-                  >
-                    <span class="map-icon">🗺️</span>
-                  </a>
+                <td class="combined-cell">
+                  <!-- Check-in information -->
+                  <div class="time-section">
+                    <div class="time-label">In:</div>
+                    <div class="time-content">
+                      <div class="time-badge-container">
+                        {{ formatTime(attendee.inTime || attendee.timestamp) }}
+                        <span :class="getInTypeBadgeClass(attendee)" class="mini-badge">
+                          {{ getInType(attendee) }}
+                        </span>
+                      </div>
+                      <div
+                        class="location-container"
+                        v-if="attendee.locationIn !== 'Office' || (attendee.remote && !attendee.mixed)"
+                      >
+                        <span class="location-text">{{
+                          attendee.locationIn || (attendee.remote ? attendee.location : 'Office')
+                        }}</span>
+                        <a
+                          v-if="
+                            attendee.firstScanDetails &&
+                            attendee.firstScanDetails.remote &&
+                            getMapUrlForScan(attendee.firstScanDetails)
+                          "
+                          :href="getMapUrlForScan(attendee.firstScanDetails)"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="map-link"
+                          title="View check-in location on Google Maps"
+                        >
+                          <span class="map-icon">🗺️</span>
+                        </a>
+                      </div>
+                      <!-- Work summary for remote check-in -->
+                      <div
+                        class="work-summary"
+                        v-if="attendee.firstScanDetails?.remote && attendee.firstScanDetails?.workSummary"
+                      >
+                        <div class="summary-label">Work Summary:</div>
+                        <div class="summary-text">{{ attendee.firstScanDetails?.workSummary }}</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Check-out information -->
+                  <div class="time-section" v-if="attendee.outTime">
+                    <div class="time-label">Out:</div>
+                    <div class="time-content">
+                      <div class="time-badge-container">
+                        {{ formatTime(attendee.outTime) }}
+                        <span v-if="attendee.outTime" :class="getOutTypeBadgeClass(attendee)" class="mini-badge">
+                          {{ getOutType(attendee) }}
+                        </span>
+                      </div>
+                      <div
+                        class="location-container"
+                        v-if="
+                          attendee.outTime &&
+                          (attendee.locationOut !== 'Office' || (attendee.mixed && attendee.secondScanDetails?.remote))
+                        "
+                      >
+                        <span class="location-text">{{ attendee.locationOut || 'Office' }}</span>
+                        <a
+                          v-if="
+                            attendee.secondScanDetails &&
+                            attendee.secondScanDetails.remote &&
+                            getMapUrlForScan(attendee.secondScanDetails)
+                          "
+                          :href="getMapUrlForScan(attendee.secondScanDetails)"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="map-link"
+                          title="View check-out location on Google Maps"
+                        >
+                          <span class="map-icon">🗺️</span>
+                        </a>
+                      </div>
+                      <!-- Work summary for remote check-out (if not already shown for check-in) -->
+                      <div
+                        class="work-summary"
+                        v-if="attendee.secondScanDetails?.remote && attendee.secondScanDetails?.workSummary"
+                      >
+                        <div class="summary-label">Work Summary:</div>
+                        <div class="summary-text">{{ attendee.secondScanDetails?.workSummary }}</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="time-section" v-else>
+                    <div class="time-label">Out:</div>
+                    <div class="time-content">
+                      <span class="pending-badge">Pending</span>
+                    </div>
+                  </div>
                 </td>
                 <td>
                   <span :class="getAttendanceTypeBadgeClass(attendee)">
                     {{ getAttendanceType(attendee) }}
                   </span>
                 </td>
-                <td>{{ attendee.workSummary || '' }}</td>
                 <td>
                   <button
                     @click="confirmRemoveAttendeeFromSession(attendee)"
@@ -600,7 +710,10 @@ export default {
       selectedExportMonth: '',
       availableMonths: [],
       monthlyAttendanceData: {},
-      isLoadingMonthData: false
+      isLoadingMonthData: false,
+
+      earlyBirdPeriod: 'day',
+      earlyBirdUsers: []
     }
   },
   computed: {
@@ -645,8 +758,124 @@ export default {
     this.loadSessions()
     this.loadArchivedSessions()
     this.loadAvailableMonths()
+    this.loadEarlyBirdData()
   },
   methods: {
+    async loadEarlyBirdData() {
+      const toast = useToast()
+      try {
+        // Clear previous data
+        this.earlyBirdUsers = []
+
+        // Set date range based on selected period
+        const { startDate, endDate } = this.getDateRangeForPeriod(this.earlyBirdPeriod)
+
+        // Early check-in cutoff time (8 AM)
+        const cutoffHour = 8
+        const earlyCheckIns = []
+
+        // Fetch data for each date in the range
+        for (let date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+          const dateString = date.toISOString().split('T')[0]
+          const dailyRef = dbRef(db, `daily-attendance/${dateString}`)
+          const snapshot = await get(dailyRef)
+
+          if (snapshot.exists()) {
+            const records = snapshot.val()
+
+            // Process each record for this date
+            Object.values(records).forEach((record) => {
+              if (!record.timestamp) return
+
+              const checkInTime = new Date(record.timestamp)
+              const checkInHour = checkInTime.getHours()
+
+              // Check if this is an early check-in (before 8 AM)
+              if (checkInHour < cutoffHour) {
+                earlyCheckIns.push({
+                  ...record,
+                  date: dateString,
+                  checkInHour
+                })
+              }
+            })
+          }
+        }
+
+        // Sort by timestamp (earliest first)
+        earlyCheckIns.sort((a, b) => a.timestamp - b.timestamp)
+
+        // Group by user (to avoid duplicates) and take the earliest check-in for each user
+        const userMap = new Map()
+        earlyCheckIns.forEach((record) => {
+          if (!record.userId) return
+
+          if (!userMap.has(record.userId) || record.timestamp < userMap.get(record.userId).timestamp) {
+            userMap.set(record.userId, record)
+          }
+        })
+
+        // Convert map to array and sort by check-in time
+        const uniqueEarlyCheckIns = Array.from(userMap.values())
+        uniqueEarlyCheckIns.sort((a, b) => a.timestamp - b.timestamp)
+
+        // Take top 10
+        this.earlyBirdUsers = uniqueEarlyCheckIns.slice(0, 10)
+
+        if (this.earlyBirdUsers.length === 0) {
+          toast.info(`No early check-ins found for the selected period.`, {
+            position: 'top-center',
+            duration: 3000
+          })
+        }
+      } catch (error) {
+        console.error('Error loading early bird data:', error)
+        toast.error(`Failed to load early check-in data: ${error.message}`, {
+          position: 'top-center',
+          duration: 5000
+        })
+      }
+    },
+
+    getDateRangeForPeriod(period) {
+      const today = new Date()
+      let startDate, endDate
+
+      switch (period) {
+        case 'day':
+          // Just today
+          startDate = new Date(today)
+          endDate = new Date(today)
+          break
+
+        case 'week':
+          // Current week (Sunday to Saturday)
+          startDate = new Date(today)
+          startDate.setDate(today.getDate() - today.getDay()) // Start of week (Sunday)
+          endDate = new Date(startDate)
+          endDate.setDate(startDate.getDate() + 6) // End of week (Saturday)
+          break
+
+        case 'month':
+          // Current month
+          startDate = new Date(today.getFullYear(), today.getMonth(), 1)
+          endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0)
+          break
+
+        case 'year':
+          // Current year
+          startDate = new Date(today.getFullYear(), 0, 1)
+          endDate = new Date(today.getFullYear(), 11, 31)
+          break
+
+        default:
+          startDate = new Date(today)
+          endDate = new Date(today)
+      }
+
+      return { startDate, endDate }
+    },
+
     getUniqueAttendeeCount(attendees) {
       if (!attendees || !attendees.length) return 0
 
@@ -778,8 +1007,8 @@ export default {
             'Out Type',
             'Location Out',
             'Map URL Out',
-            'Attendance Type',
-            'Work Summary'
+            'Attendance Type'
+            // 'Work Summary'
           ]
 
           let csvContent = headers.join(',') + '\n'
@@ -796,8 +1025,8 @@ export default {
               record.outType || '',
               record.locationOut || (record.outTime ? 'Office' : ''),
               record.mapUrlOut || '',
-              record.attendanceType,
-              record.workSummary || ''
+              record.attendanceType
+              // record.workSummary || ''
             ]
 
             // Escape fields that might contain commas
@@ -942,8 +1171,8 @@ export default {
             locationIn: locationIn,
             locationOut: locationOut,
             mapUrlIn: mapUrlIn,
-            mapUrlOut: mapUrlOut,
-            workSummary: firstRecord.workSummary || ''
+            mapUrlOut: mapUrlOut
+            // workSummary: firstRecord.workSummary || ''
           })
         })
       }
@@ -2446,8 +2675,8 @@ export default {
         'Out Type',
         'Location Out',
         'Map URL Out',
-        'Attendance Type',
-        'Work Summary'
+        'Attendance Type'
+        // 'Work Summary'
       ]
 
       // Use all filtered data, not just the current page
@@ -2483,8 +2712,8 @@ export default {
           outType,
           attendee.locationOut || (attendee.outTime ? 'Office' : ''),
           attendee.mapUrlOut || '',
-          attendanceType,
-          attendee.workSummary || ''
+          attendanceType
+          // attendee.workSummary || ''
         ]
 
         // Escape fields that might contain commas
@@ -2515,8 +2744,8 @@ export default {
         'Out Type',
         'Location Out',
         'Map URL Out',
-        'Attendance Type',
-        'Work Summary'
+        'Attendance Type'
+        // 'Work Summary'
       ]
 
       let csvContent = headers.join(',') + '\n'
@@ -2538,8 +2767,8 @@ export default {
           outType,
           attendee.locationOut || (attendee.outTime ? 'Office' : ''),
           attendee.mapUrlOut || '',
-          attendanceType,
-          attendee.workSummary || ''
+          attendanceType
+          // attendee.workSummary || ''
         ]
 
         // Escape fields that might contain commas
@@ -3152,17 +3381,64 @@ tr:nth-child(even) {
   cursor: pointer;
 }
 
+.combined-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.time-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+}
+
+.time-label {
+  font-weight: 600;
+  color: #555;
+  min-width: 35px;
+}
+
+.time-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.time-badge-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.location-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85em;
+  color: #666;
+  margin-left: 2px;
+}
+
+.location-text {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .map-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #2196f3;
   text-decoration: none;
-  width: 30px;
-  height: 30px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   background-color: #e3f2fd;
   transition: background-color 0.2s;
+  font-size: 0.85em;
 }
 
 .map-link:hover {
@@ -3170,7 +3446,29 @@ tr:nth-child(even) {
 }
 
 .map-icon {
-  font-size: 16px;
+  font-size: 12px;
+}
+
+/* Work summary styles */
+.work-summary {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #e0e0e0;
+  font-size: 0.85em;
+}
+
+.summary-label {
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 2px;
+}
+
+.summary-text {
+  color: #666;
+  line-height: 1.4;
+  max-width: 300px;
+  white-space: normal;
+  word-break: break-word;
 }
 
 /* Make the table more responsive with the additional columns */
@@ -3179,6 +3477,14 @@ tr:nth-child(even) {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
+  }
+
+  .location-text {
+    max-width: 100px;
+  }
+
+  .summary-text {
+    max-width: 200px;
   }
 }
 
@@ -3202,6 +3508,18 @@ tr:nth-child(even) {
 
   .session-summary {
     grid-template-columns: 1fr;
+  }
+
+  .location-text {
+    max-width: 80px;
+  }
+
+  .time-label {
+    min-width: 30px;
+  }
+
+  .summary-text {
+    max-width: 150px;
   }
 }
 
@@ -3390,5 +3708,97 @@ tr:nth-child(even) {
     overflow-x: auto;
     white-space: nowrap;
   }
+}
+
+/* New styles for early bird feature */
+.early-bird-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #4caf50;
+}
+
+.early-bird-filters {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+}
+
+.filter-group label {
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.filter-group select,
+.filter-group input {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+}
+
+.early-bird-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.early-bird-table th {
+  background-color: #e8f5e9;
+  color: #2e7d32;
+  font-weight: bold;
+  text-align: left;
+  padding: 12px;
+}
+
+.early-bird-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.early-bird-table tr:nth-child(even) {
+  background-color: #f5f5f5;
+}
+
+.early-bird-table tr:hover {
+  background-color: #e8f5e9;
+}
+
+/* Highlight top 3 */
+.early-bird-table tr:nth-child(1) td:first-child {
+  background-color: #ffd700;
+  color: #333;
+  font-weight: bold;
+  border-radius: 50%;
+  width: 30px;
+  text-align: center;
+}
+
+.early-bird-table tr:nth-child(2) td:first-child {
+  background-color: #c0c0c0;
+  color: #333;
+  font-weight: bold;
+  border-radius: 50%;
+  width: 30px;
+  text-align: center;
+}
+
+.early-bird-table tr:nth-child(3) td:first-child {
+  background-color: #cd7f32;
+  color: #333;
+  font-weight: bold;
+  border-radius: 50%;
+  width: 30px;
+  text-align: center;
 }
 </style>
