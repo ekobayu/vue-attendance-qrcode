@@ -6,6 +6,7 @@ import RemoteAttendance from '../views/RemoteAttendance.vue'
 import SignUp from '../components/SignUp.vue'
 import UserManagement from '../components/UserManagement.vue'
 import QRDisplay from '../components/QRDisplay.vue'
+import EarlyBirdPage from '../components/EarlyBirdPage.vue'
 import { auth, db } from '../firebase/config'
 import { ref as dbRef, get } from 'firebase/database'
 
@@ -48,6 +49,14 @@ const routes = [
     path: '/qr-display',
     name: 'QRDisplay',
     component: QRDisplay,
+    meta: {
+      hideNavigation: true
+    }
+  },
+  {
+    path: '/early-check-in',
+    name: 'EarlyBirdPage',
+    component: EarlyBirdPage,
     meta: {
       hideNavigation: true
     }

@@ -4,7 +4,13 @@
 
     <!-- New Early Bird Feature -->
     <div class="early-bird-section">
-      <h3>Early Bird Check-ins (before 8 AM)</h3>
+      <div class="early-bird-header">
+        <h3>Early Bird Check-ins (before 8 AM)</h3>
+        <router-link to="/early-check-in" class="view-all-btn">
+          <span class="view-all-icon">🔍</span> View Full Page
+        </router-link>
+      </div>
+
       <div class="early-bird-filters">
         <div class="filter-group">
           <label for="early-bird-period">Time Period:</label>
@@ -3724,6 +3730,46 @@ tr:nth-child(even) {
   gap: 20px;
   margin-bottom: 15px;
   flex-wrap: wrap;
+}
+
+.early-bird-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.view-all-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #4caf50;
+  color: white;
+  padding: 8px 15px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-size: 14px;
+  transition: background-color 0.2s;
+}
+
+.view-all-btn:hover {
+  background-color: #43a047;
+}
+
+.view-all-icon {
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .early-bird-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .view-all-btn {
+    align-self: flex-end;
+  }
 }
 
 .filter-group {
