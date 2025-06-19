@@ -1,6 +1,6 @@
 <template>
   <div class="settings-section">
-    <h3>Remote Work Settings</h3>
+    <h2>Remote Work Settings</h2>
 
     <div class="setting-group">
       <h4>Remote Work Availability</h4>
@@ -384,15 +384,20 @@ export default {
 .settings-section {
   margin-bottom: 30px;
   padding: 20px;
-  background-color: #fff;
-  color: #2c3e50;
-  border-radius: 8px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   position: relative;
 }
 
 .setting-group {
   margin-top: 15px;
+  background-color: #fff;
+  color: #2c3e50;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.setting-group h4{
+  margin-top: 0;
 }
 
 .setting-description {
