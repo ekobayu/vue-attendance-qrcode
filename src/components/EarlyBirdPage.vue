@@ -207,7 +207,6 @@ h1::before {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
-  color: #666;
   border-bottom: 1px solid #e0e0e0;
   padding-bottom: 15px;
 }
@@ -227,6 +226,7 @@ h1::before {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
   overflow: hidden;
   margin-bottom: 30px;
+  color: #2c3e50;
 }
 
 .early-bird-table {

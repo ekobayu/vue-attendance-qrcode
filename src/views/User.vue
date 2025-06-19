@@ -1083,6 +1083,7 @@ export default {
 .user-info {
   background-color: #f5f5f5;
   padding: 15px;
+  color: #2c3e50;
   border-radius: 8px;
   margin-bottom: 20px;
   border-left: 4px solid #4caf50;
@@ -1116,6 +1117,7 @@ export default {
   flex: 1;
   padding: 20px;
   background-color: #fff;
+  color: #2c3e50;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
@@ -1180,6 +1182,7 @@ export default {
 .history-list {
   margin-top: 15px;
   background-color: white;
+  color: #2c3e50;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   overflow: hidden;
@@ -1436,6 +1439,7 @@ export default {
 .month-records {
   padding: 8px;
   background-color: #fff;
+  color: #2c3e50;
   animation: fadeIn 0.3s ease-in-out;
 }
 
@@ -1502,7 +1506,6 @@ export default {
   cursor: pointer;
   font-size: 16px;
   font-weight: 500;
-  color: #666;
   transition: all 0.2s;
 }
 
@@ -1709,6 +1712,7 @@ export default {
   padding: 15px;
   background-color: #f5f5f5;
   border-radius: 8px;
+  color: #2c3e50;
 }
 
 .scan-status h3 {

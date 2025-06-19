@@ -385,6 +385,7 @@ export default {
   margin-bottom: 30px;
   padding: 20px;
   background-color: #fff;
+  color: #2c3e50;
   border-radius: 8px;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
   position: relative;
@@ -448,6 +449,8 @@ export default {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 .setting-note {
@@ -557,6 +560,7 @@ input:checked + .toggle-slider:before {
 
 .user-search {
   margin-bottom: 15px;
+  display: flex;
 }
 
 .search-input {
@@ -565,6 +569,7 @@ input:checked + .toggle-slider:before {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 14px;
+  background-color: #fff;
 }
 
 .user-list {

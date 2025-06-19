@@ -804,6 +804,7 @@ export default {
   margin: 0 auto;
   padding: 20px;
   background-color: #fff;
+  color: #2c3e50;
   border-radius: 8px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
@@ -830,6 +831,12 @@ input[type='time'] {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+  background: #fff;
+  color: #2c3e50;
+}
+
+#session-date {
+  width: 97%;
 }
 
 .checkbox-container {

@@ -811,6 +811,7 @@ export default {
   padding: 20px;
   background-color: #fff;
   border-radius: 8px;
+  color: #2c3e50;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -895,6 +896,8 @@ textarea {
 
 .location-input input {
   flex: 1;
+  background-color: #f6f6f6;
+  color: #a8a2a2;
 }
 
 .location-btn {
@@ -985,6 +988,8 @@ textarea {
 
 textarea {
   resize: vertical;
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 .mark-btn {

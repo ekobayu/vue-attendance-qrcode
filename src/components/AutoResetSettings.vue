@@ -276,13 +276,17 @@ label {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 input[type='time'] {
   padding: 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  width: 150px;
+  width: 80px;
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 .time-label {
@@ -295,6 +299,7 @@ input[type='time'] {
   background-color: #f5f5f5;
   border-radius: 4px;
   border-left: 4px solid #2196f3;
+  color: #2c3e50;
 }
 
 .current-settings h3 {

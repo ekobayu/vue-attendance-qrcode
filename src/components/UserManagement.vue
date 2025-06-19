@@ -899,7 +899,6 @@ export default {
 
 h2 {
   margin-bottom: 30px;
-  color: #333;
 }
 
 .controls-container {
@@ -929,6 +928,7 @@ h2 {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+  background-color: #fff;
 }
 
 .clear-search {
@@ -1052,6 +1052,7 @@ h2 {
   position: relative;
   padding-right: 25px;
   user-select: none;
+  color: #2c3e50;
 }
 
 .users-table th:hover {
@@ -1060,6 +1061,7 @@ h2 {
 
 .users-table th.sorted {
   background-color: #e3f2fd;
+  color: #000;
 }
 
 .sort-icon {
@@ -1079,6 +1081,11 @@ th.sorted .sort-icon {
   padding: 12px 15px;
   text-align: left;
   border-bottom: 1px solid #ddd;
+}
+
+.users-table tbody {
+  background: #fff;
+  color: #2c3e50;
 }
 
 .users-table tbody tr:hover {
@@ -1237,6 +1244,7 @@ th.sorted .sort-icon {
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
+  color: #2c3e50;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
 }
 

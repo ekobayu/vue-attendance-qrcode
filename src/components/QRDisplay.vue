@@ -205,7 +205,8 @@ nav {
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  background-color: #f5f5f5;
+  /* background-color: #f5f5f5; */
+  color: #2c3e50;
 }
 
 .qr-container {

@@ -2913,6 +2913,8 @@ input[type='date'] {
   border: 1px solid #ddd;
   width: 100%;
   max-width: 200px;
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 .table-controls {
@@ -2926,6 +2928,7 @@ input[type='date'] {
   position: relative;
   max-width: 300px;
   width: 100%;
+  display: flex;
 }
 
 .search-box input {
@@ -2933,6 +2936,7 @@ input[type='date'] {
   padding: 8px 30px 8px 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
+  background-color: #fff;
 }
 
 .clear-search {
@@ -2961,8 +2965,14 @@ input[type='date'] {
   background-color: #f2f2f2;
   cursor: pointer;
   position: relative;
+  color: #2c3e50;
   padding-right: 25px; /* Space for sort icon */
   user-select: none;
+}
+
+.sortable-table tbody {
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 .sortable-table th:hover {
@@ -3089,6 +3099,7 @@ tr:nth-child(even) {
 .session-header {
   padding: 15px;
   background-color: #f5f5f5;
+  color: #2c3e50;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -3108,6 +3119,7 @@ tr:nth-child(even) {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  color: #2c3e50;
 }
 
 .session-info {
@@ -3294,6 +3306,7 @@ tr:nth-child(even) {
 
 .modal-content {
   background-color: white;
+  color: #2c3e50;
   border-radius: 8px;
   width: 90%;
   max-width: 800px;
@@ -3353,12 +3366,15 @@ tr:nth-child(even) {
 
 .attendee-search {
   margin-bottom: 15px;
+  position: relative;
+  display: flex;
 }
 
 .attendee-search input {
   width: 100%;
   padding: 10px;
   border: 1px solid #ddd;
+  background-color: #fff;
   border-radius: 4px;
 }
 
@@ -3721,6 +3737,7 @@ tr:nth-child(even) {
   margin-bottom: 30px;
   padding: 20px;
   background-color: #f8f9fa;
+  color: #2c3e50;
   border-radius: 8px;
   border-left: 4px solid #4caf50;
 }
