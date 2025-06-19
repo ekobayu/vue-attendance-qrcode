@@ -550,6 +550,8 @@ input[type='password'] {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+  color: #2c3e50;
+  background-color: #fff;
   transition: border-color 0.3s;
 }
 
@@ -883,6 +885,7 @@ input:focus {
 
 .modal-content {
   background-color: white;
+  color: #2c3e50;
   border-radius: 8px;
   width: 90%;
   max-width: 600px;

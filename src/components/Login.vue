@@ -223,6 +223,7 @@ export default {
   padding: 30px;
   background-color: #fff;
   border-radius: 8px;
+  color: #2c3e50;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 
@@ -251,6 +252,8 @@ input[type='text'] {
   border: 1px solid #ddd;
   border-radius: 4px;
   font-size: 16px;
+  background-color: #fff;
+  color: #2c3e50;
 }
 
 input:focus {

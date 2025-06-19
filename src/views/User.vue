@@ -1496,6 +1496,7 @@ export default {
   display: flex;
   border-bottom: 1px solid #ddd;
   margin-bottom: 20px;
+  margin-top: 20px;
 }
 
 .tab-btn {
