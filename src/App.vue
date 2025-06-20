@@ -4,7 +4,8 @@
       <header v-if="!$route.meta.hideNavigation">
         <nav v-if="user">
           <div class="nav-links">
-            <router-link to="/">Home</router-link> | <router-link to="/user">Mark Attendance</router-link> |
+            <router-link to="/">Home</router-link> | <router-link to="/user">Mark Attendance</router-link>
+            <span v-if="isAdmin">|</span>
             <router-link v-if="isAdmin" to="/admin">Admin Panel</router-link>
           </div>
           <div class="nav-controls">
