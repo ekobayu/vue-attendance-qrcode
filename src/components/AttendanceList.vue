@@ -5,7 +5,7 @@
     <!-- New Early Bird Feature -->
     <div class="early-bird-section">
       <div class="early-bird-header">
-        <h3>Early Bird Check-ins (before 8 AM)</h3>
+        <h3>Early Bird Check-ins (before 8.30 AM)</h3>
         <router-link to="/early-check-in" class="view-all-btn">
           <span class="view-all-icon">🔍</span> View Full Page
         </router-link>
@@ -60,7 +60,6 @@
     </div>
 
     <!-- Daily Attendance Tab -->
-    <!-- Daily Attendance Tab -->
     <div v-if="activeTab === 'daily'">
       <div class="filters">
         <div class="date-selector">
@@ -80,6 +79,50 @@
             <button @click="exportMonthToCSV" class="export-month-btn" :disabled="!selectedExportMonth">
               Export Month
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="selectedDate" class="not-checked-in-section">
+        <div class="not-checked-in-header" @click="showNotCheckedIn = !showNotCheckedIn">
+          <div class="header-content">
+            <span class="expand-icon">{{ showNotCheckedIn ? '▼' : '►' }}</span>
+            <h3>Users Not Yet Checked In</h3>
+            <span class="count-badge">{{ usersNotCheckedIn.length }}</span>
+          </div>
+          <button
+            v-if="usersNotCheckedIn.length > 0"
+            @click.stop="exportNotCheckedInToCSV"
+            class="export-small-btn"
+            title="Export to CSV"
+          >
+            <span class="icon">⬇</span> Export
+          </button>
+        </div>
+
+        <div v-if="showNotCheckedIn" class="not-checked-in-content">
+          <div v-if="usersNotCheckedIn.length === 0" class="all-checked-in">
+            <span class="success-icon">✓</span>
+            <p>All active users have checked in!</p>
+          </div>
+
+          <div v-else class="not-checked-in-list">
+            <table class="simple-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(user, index) in usersNotCheckedIn" :key="user.id">
+                  <td>{{ index + 1 }}</td>
+                  <td>{{ user.fullName || 'N/A' }}</td>
+                  <td>{{ user.email }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -719,7 +762,10 @@ export default {
       isLoadingMonthData: false,
 
       earlyBirdPeriod: 'day',
-      earlyBirdUsers: []
+      earlyBirdUsers: [],
+
+      allUsers: [],
+      showNotCheckedIn: false
     }
   },
   computed: {
@@ -734,6 +780,17 @@ export default {
     },
     hasRemoteAttendees() {
       return this.filteredAttendees.some((attendee) => attendee.remote || attendee.mixed)
+    },
+    usersNotCheckedIn() {
+      if (!this.selectedDate || !this.allUsers.length) return []
+
+      // Get user IDs who have checked in today
+      const checkedInUserIds = new Set(this.uniqueAttendees.map((a) => a.userId))
+
+      // Filter users who haven't checked in and are active
+      return this.allUsers
+        .filter((user) => user.active !== false && !checkedInUserIds.has(user.id))
+        .sort((a, b) => (a.fullName || a.email).localeCompare(b.fullName || b.email))
     }
   },
   watch: {
@@ -765,6 +822,7 @@ export default {
     this.loadArchivedSessions()
     this.loadAvailableMonths()
     this.loadEarlyBirdData()
+    this.loadAllUsers()
   },
   methods: {
     async loadEarlyBirdData() {
@@ -776,8 +834,9 @@ export default {
         // Set date range based on selected period
         const { startDate, endDate } = this.getDateRangeForPeriod(this.earlyBirdPeriod)
 
-        // Early check-in cutoff time (8 AM)
+        // Early check-in cutoff time (8:30 AM)
         const cutoffHour = 8
+        const cutoffMinute = 30
         const earlyCheckIns = []
 
         // Fetch data for each date in the range
@@ -795,13 +854,19 @@ export default {
 
               const checkInTime = new Date(record.timestamp)
               const checkInHour = checkInTime.getHours()
+              const checkInMinute = checkInTime.getMinutes()
 
-              // Check if this is an early check-in (before 8 AM)
-              if (checkInHour < cutoffHour) {
+              // Check if this is an early check-in (before 8:30 AM)
+              // Either before 8 AM, or at 8 AM but before 30 minutes
+              const isEarlyCheckIn =
+                checkInHour < cutoffHour || (checkInHour === cutoffHour && checkInMinute < cutoffMinute)
+
+              if (isEarlyCheckIn) {
                 earlyCheckIns.push({
                   ...record,
                   date: dateString,
-                  checkInHour
+                  checkInHour,
+                  checkInMinute
                 })
               }
             })
@@ -1208,11 +1273,9 @@ export default {
         if (data) {
           this.attendees = Object.keys(data).map((key, index) => ({
             id: key,
-            originalIndex: index, // Store original index for sorting
+            originalIndex: index,
             ...data[key],
-            location: data[key].location || 'Office', // Ensure location exists
-
-            // Ensure mapsUrl exists if coordinates are available but no mapsUrl
+            location: data[key].location || 'Office',
             mapsUrl:
               data[key].mapsUrl ||
               (data[key].coordinates
@@ -1220,10 +1283,7 @@ export default {
                 : null)
           }))
 
-          // Group attendees by userId to show in/out times
           this.processAttendanceRecords()
-
-          // Initial sort by in time
           this.sortTable('inTime')
           this.filterAttendees()
         } else {
@@ -2792,6 +2852,28 @@ export default {
       this.downloadCSV(csvContent, filename)
     },
 
+    exportNotCheckedInToCSV() {
+      if (!this.usersNotCheckedIn.length) return
+
+      const headers = ['Name', 'Email']
+      let csvContent = headers.join(',') + '\n'
+
+      this.usersNotCheckedIn.forEach((user) => {
+        const row = [user.fullName || '', user.email || '']
+
+        const escapedRow = row.map((field) => {
+          if (field && typeof field === 'string' && (field.includes(',') || field.includes('"'))) {
+            return `"${field.replace(/"/g, '""')}"`
+          }
+          return field
+        })
+
+        csvContent += escapedRow.join(',') + '\n'
+      })
+
+      this.downloadCSV(csvContent, `Not_Checked_In_${this.selectedDate}.csv`)
+    },
+
     downloadCSV(csvContent, filename) {
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const link = document.createElement('a')
@@ -2804,6 +2886,25 @@ export default {
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+    },
+
+    async loadAllUsers() {
+      try {
+        const usersRef = dbRef(db, 'users')
+        const snapshot = await get(usersRef)
+
+        if (snapshot.exists()) {
+          const usersData = snapshot.val()
+          this.allUsers = Object.keys(usersData).map((uid) => ({
+            id: uid,
+            ...usersData[uid]
+          }))
+        } else {
+          this.allUsers = []
+        }
+      } catch (error) {
+        console.error('Error loading users:', error)
+      }
     }
   }
 }
@@ -2868,7 +2969,7 @@ export default {
 
 .export-month-btn {
   background-color: #4caf50;
-  color: white;
+  color: #333;
   padding: 8px 15px;
   border: none;
   border-radius: 4px;
@@ -3863,5 +3964,145 @@ tr:nth-child(even) {
   border-radius: 50%;
   width: 30px;
   text-align: center;
+}
+
+.not-checked-in-section {
+  margin-bottom: 25px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #fff;
+}
+
+.not-checked-in-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background-color: #fff3e0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-bottom: 1px solid #ffe0b2;
+}
+
+.not-checked-in-header:hover {
+  background-color: #ffe0b2;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.header-content h3 {
+  margin: 0;
+  color: #e65100;
+  font-size: 1.1em;
+}
+
+.count-badge {
+  background-color: #ff9800;
+  color: white;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.9em;
+  font-weight: bold;
+  min-width: 30px;
+  text-align: center;
+}
+
+.export-small-btn {
+  background-color: #4caf50;
+  color: white;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background-color 0.2s;
+}
+
+.export-small-btn:hover {
+  background-color: #43a047;
+}
+
+.export-small-btn .icon {
+  font-size: 16px;
+}
+
+.not-checked-in-content {
+  padding: 15px;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.all-checked-in {
+  text-align: center;
+  padding: 30px;
+  color: #4caf50;
+}
+
+.success-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.all-checked-in p {
+  font-size: 1.2em;
+  font-weight: bold;
+  margin: 0;
+}
+
+.not-checked-in-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.simple-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.simple-table th {
+  background-color: #f5f5f5;
+  color: #333;
+  font-weight: bold;
+  text-align: left;
+  padding: 10px;
+  border-bottom: 2px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.simple-table td {
+  padding: 10px;
+  border-bottom: 1px solid #f0f0f0;
+  color: #2c3e50;
+}
+
+.simple-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.simple-table tbody tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+@media (max-width: 768px) {
+  .not-checked-in-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .export-small-btn {
+    align-self: flex-end;
+  }
 }
 </style>
