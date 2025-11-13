@@ -358,34 +358,68 @@ export default {
     isRemoteWorkEnabled() {
       if (!this.remoteWorkLoaded || !this.remoteWorkSettings) return false
 
-      // Check if user-specific permissions are enabled and if this user has permission
-      if (
-        this.remoteWorkSettings.enableUserSpecificPermissions &&
-        this.remoteWorkSettings.allowedRemoteUsers &&
-        this.remoteWorkSettings.allowedRemoteUsers[this.user.uid]
-      ) {
-        // User has specific permission to work remotely regardless of other restrictions
-        return true
-      }
-
       // Check if daily scan limit is reached
       if (this.scanCount >= 2) {
         return false // Daily scan limit reached, disable remote work
       }
 
+      // Check if individual settings are enabled and if this user has custom settings
+      if (
+        this.remoteWorkSettings.enableIndividualSettings &&
+        this.remoteWorkSettings.userCustomSettings &&
+        this.remoteWorkSettings.userCustomSettings[this.user.uid]
+      ) {
+        // User has custom settings, use those instead of global settings
+        const userSettings = this.remoteWorkSettings.userCustomSettings[this.user.uid]
+
+        // If user has unlimited access, allow remote work
+        if (userSettings.unlimitedAccess) {
+          return true
+        }
+
+        // Get current day and time
+        const now = new Date()
+        const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+        const currentDay = dayNames[now.getDay()]
+
+        // Check if current day is enabled for this user
+        if (!userSettings.enabledDays[currentDay]) {
+          return false
+        }
+
+        // Check time restrictions for this user
+        if (userSettings.startTime && userSettings.endTime) {
+          const currentTime = now.getHours() * 60 + now.getMinutes()
+
+          const [startHours, startMinutes] = userSettings.startTime.split(':').map(Number)
+          const [endHours, endMinutes] = userSettings.endTime.split(':').map(Number)
+
+          const startTime = startHours * 60 + startMinutes
+          const endTime = endHours * 60 + endMinutes
+
+          if (currentTime < startTime || currentTime > endTime) {
+            return false
+          }
+        }
+
+        // User's custom settings allow remote work
+        return true
+      }
+
+      // Use global settings if no custom settings exist
       // Get current day and time
       const now = new Date()
       const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
       const currentDay = dayNames[now.getDay()]
 
-      // Check if current day is enabled
+      // Check if current day is enabled globally
       if (!this.remoteWorkSettings.enabledDays[currentDay]) {
         return false
       }
 
-      // Check time restrictions
+      // Check global time restrictions
       if (this.remoteWorkSettings.startTime && this.remoteWorkSettings.endTime) {
-        const currentTime = now.getHours() * 60 + now.getMinutes() // minutes since midnight
+        const currentTime = now.getHours() * 60 + now.getMinutes()
 
         const [startHours, startMinutes] = this.remoteWorkSettings.startTime.split(':').map(Number)
         const [endHours, endMinutes] = this.remoteWorkSettings.endTime.split(':').map(Number)
@@ -926,25 +960,69 @@ export default {
         return 'as you have reached your daily scan limit (2 scans).'
       }
 
-      // If user-specific permissions are enabled, check if this user is not in the allowed list
-      if (
-        this.remoteWorkSettings.enableUserSpecificPermissions &&
-        this.remoteWorkSettings.allowedRemoteUsers &&
-        !this.remoteWorkSettings.allowedRemoteUsers[this.user.uid]
-      ) {
-        return 'as you do not have permission for remote work.'
-      }
-
       const now = new Date()
       const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
       const currentDay = dayNames[now.getDay()]
 
-      // Check if current day is disabled
+      // Check if user has custom settings
+      if (
+        this.remoteWorkSettings.enableIndividualSettings &&
+        this.remoteWorkSettings.userCustomSettings &&
+        this.remoteWorkSettings.userCustomSettings[this.user.uid]
+      ) {
+        const userSettings = this.remoteWorkSettings.userCustomSettings[this.user.uid]
+
+        // If user has unlimited access, they shouldn't see this message
+        if (userSettings.unlimitedAccess) {
+          return 'at this time (this should not happen).'
+        }
+
+        // Check if current day is disabled for this user
+        if (!userSettings.enabledDays[currentDay]) {
+          return 'on ' + currentDay.charAt(0).toUpperCase() + currentDay.slice(1) + 's (per your custom schedule).'
+        }
+
+        // Check user's custom time restrictions
+        if (userSettings.startTime && userSettings.endTime) {
+          const [startHours, startMinutes] = userSettings.startTime.split(':').map(Number)
+          const [endHours, endMinutes] = userSettings.endTime.split(':').map(Number)
+
+          const startTimeFormatted = new Date().setHours(startHours, startMinutes, 0, 0)
+          const endTimeFormatted = new Date().setHours(endHours, endMinutes, 0, 0)
+
+          const startTimeDisplay = new Date(startTimeFormatted).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+          const endTimeDisplay = new Date(endTimeFormatted).toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+          })
+
+          const currentTime = now.getHours() * 60 + now.getMinutes()
+          const startTime = startHours * 60 + startMinutes
+          const endTime = endHours * 60 + endMinutes
+
+          if (currentTime < startTime || currentTime > endTime) {
+            return `outside your allowed hours (${startTimeDisplay} - ${endTimeDisplay}).`
+          }
+        }
+
+        return 'at this time (per your custom schedule).'
+      }
+
+      // If individual settings are enabled but user doesn't have custom settings
+      if (this.remoteWorkSettings.enableIndividualSettings) {
+        return 'as you do not have custom remote work permissions set up.'
+      }
+
+      // Use global settings checks
+      // Check if current day is disabled globally
       if (!this.remoteWorkSettings.enabledDays[currentDay]) {
         return 'on ' + currentDay.charAt(0).toUpperCase() + currentDay.slice(1) + 's.'
       }
 
-      // Check time restrictions
+      // Check global time restrictions
       if (this.remoteWorkSettings.startTime && this.remoteWorkSettings.endTime) {
         const [startHours, startMinutes] = this.remoteWorkSettings.startTime.split(':').map(Number)
         const [endHours, endMinutes] = this.remoteWorkSettings.endTime.split(':').map(Number)
